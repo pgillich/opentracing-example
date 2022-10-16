@@ -1,0 +1,129 @@
+run:
+  skip-dirs:
+    - testdata
+    - internal/models
+    - internal/restapi
+  tests: true
+  go: '1.17'
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  gocyclo:
+    min-complexity: 10
+  golint:
+    min-confidence: 0
+  govet:
+    check-shadowing: true
+  goconst:
+    min-occurrences: 4
+  gofmt:
+    simplify: true
+  lll:
+    line-length: 120
+    tab-width: 4
+  funlen:
+    lines: 100
+  nestif:
+    min-complexity: 10
+  gocritic:
+    disabled-checks:
+      - paramTypeCombine
+      - emptyStringTest
+      - ifElseChain
+      - commentFormatting
+      - unnamedResult
+    enabled-tags:
+      - performance
+      - diagnostic
+      - style
+    settings:
+      hugeParam:
+        sizeThreshold: 512
+      rangeValCopy:
+        sizeThreshold: 512
+  wsl:
+    allow-assign-and-call: false
+  revive:
+    rules:
+      - name: package-comments
+        severity: warning
+        disabled: true
+
+linters:
+  enable-all: true
+  #disable-all: true
+  disable:
+    - godox
+    - gofumpt
+    - forbidigo
+    - paralleltest
+    - exhaustivestruct
+    - testpackage
+    - varnamelen
+    - gci
+    - wsl
+    - ireturn
+    - stylecheck
+    - gomnd
+    - gochecknoinits
+    - golint
+    - lll
+    - interfacer
+    - maligned
+    - scopelint
+    - exhaustruct
+issues:
+  exclude-use-default: false
+  exclude-rules:
+    - path: .*_test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - lll
+        - goconst
+        - govet
+        - funlen
+        - bodyclose
+    - text: "package comment should not have leading space"
+      linters:
+        - golint
+    - text: "should have a package comment, unless it's in another file for this package"
+      linters:
+        - golint
+    - text: "at least one file in a package should have a package comment"
+      linters:
+        - stylecheck
+    - text: "exported (.*) should have comment .*or be unexported"
+      linters:
+        - golint
+    - text: "exported (.*) should have comment .*or be unexported"
+      linters:
+        - revive
+    - text: "exported const (.*) should have comment [(]or a comment on this block[)] or be unexported"
+      linters:
+        - golint
+    - text: "commentedOutCode: may want to remove commented-out code"
+      linters:
+        - gocritic
+    - text: "Comment should end in a period"
+      linters:
+        - godot
+    - text: "exitAfterDefer"
+      linters:
+        - gocritic
+    - text: "if block ends with a return statement, so drop this else and outdent its block"
+      linters:
+        - "golint"
+    - text: "Use errors.As to check for specific errors"
+      linters:
+        - errorlint
+    - text: "indent-error-flow: if block ends with a return statement, so drop this else and outdent its block"
+      linters:
+        - revive
+    - text: "error returned from external package is unwrapped"
+      linters:
+        - wrapcheck
