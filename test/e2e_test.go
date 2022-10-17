@@ -67,8 +67,6 @@ func (s *E2ETestSuite) sendPingFrontend(feServer *TestServer, beServerAddrs []st
 }
 
 func (s *E2ETestSuite) TestMoreBackendFromClient() {
-	//log := logger.GetLogger(s.T().Name())
-
 	beServer1 := runTestServer("backend", "--response", "PONG_1")
 	defer beServer1.cancel()
 	beServer2 := runTestServer("backend", "--response", "PONG_2")
@@ -76,7 +74,6 @@ func (s *E2ETestSuite) TestMoreBackendFromClient() {
 	feServer1 := runTestServer("frontend")
 	defer feServer1.cancel()
 
-	/*client := */
 	runTestClient("client", feServer1.addr, "http://"+beServer1.addr+"/ping", "http://"+beServer2.addr+"/ping", "http://"+beServer2.addr+"/ping")
 
 	time.Sleep(1 * time.Second)

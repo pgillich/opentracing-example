@@ -49,7 +49,7 @@ func (c *Client) Run(args []string) error {
 		return err
 	}
 	if resp.Body != nil {
-		defer resp.Body.Close()
+		defer resp.Body.Close() //nolint:errcheck // not needed
 	}
 	c.log.Info("Client resp", "body", string(body))
 

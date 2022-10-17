@@ -3,11 +3,10 @@ package internal
 import (
 	"context"
 	"net/http"
-	"time"
 
-	"github.com/alron/ginlogr"
-	"github.com/gin-gonic/gin"
 	"github.com/go-logr/logr"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
 	"github.com/pgillich/opentracing-example/internal/model"
@@ -46,14 +45,24 @@ func NewBackendService(ctx context.Context, cfg interface{}, log logr.Logger) mo
 func (s *Backend) Run(args []string) error {
 	s.log = s.log.WithValues("args", args)
 	s.log.Info("Backend start")
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
-	router.Use(ginlogr.Ginlogr(s.log, time.RFC3339, false))
-	router.Use(ginlogr.RecoveryWithLogr(s.log, time.RFC3339, false, true))
-	router.GET("/ping", func(c *gin.Context) {
-		c.String(http.StatusOK, s.config.Response)
+
+	e := echo.New()
+	e.Use(EchoLogr(s.log))
+	e.Use(middleware.Recover())
+	e.GET("/ping", func(c echo.Context) error {
+		return c.String(http.StatusOK, s.config.Response) //nolint:wrapcheck // Echo
 	})
-	s.serverRunner(router.Handler(), s.shutdown, s.config.ListenAddr, s.log)
+	s.serverRunner(e, s.shutdown, s.config.ListenAddr, s.log)
+	/*
+		gin.SetMode(gin.ReleaseMode)
+		router := gin.New()
+		router.Use(ginlogr.Ginlogr(s.log, time.RFC3339, false))
+		router.Use(ginlogr.RecoveryWithLogr(s.log, time.RFC3339, false, true))
+		router.GET("/ping", func(c *gin.Context) {
+			c.String(http.StatusOK, s.config.Response)
+		})
+		s.serverRunner(router.Handler(), s.shutdown, s.config.ListenAddr, s.log)
+	*/
 	s.log.Info("Backend exit")
 
 	return nil
