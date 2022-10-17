@@ -26,7 +26,7 @@ var clientCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 
 func init() {
 	rootCmd.AddCommand(clientCmd)
-	clientCmd.PersistentFlags().String("server", "localhost", "Server address")
+	clientCmd.Flags().String("server", "localhost:8882", "FE server address")
 	if err := viper.BindPFlags(clientCmd.Flags()); err != nil {
 		logger.GetLogger(clientCmd.Use).Error(err, "Unable to bind flags")
 		panic(err)

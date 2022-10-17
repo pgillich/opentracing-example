@@ -26,7 +26,7 @@ var backendCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 
 func init() {
 	rootCmd.AddCommand(backendCmd)
-	backendCmd.Flags().String("listenaddr", "localhost:888", "Listen address")
+	backendCmd.Flags().String("listenaddr", "localhost:8881", "Listen address")
 	backendCmd.Flags().String("response", "Hello", "Response text")
 	if err := viper.BindPFlags(backendCmd.Flags()); err != nil {
 		logger.GetLogger(backendCmd.Use).Error(err, "Unable to bind flags")

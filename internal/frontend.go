@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/alron/ginlogr"
@@ -59,31 +60,33 @@ func (s *Frontend) Run(args []string) error {
 			c.String(http.StatusInternalServerError, err.Error())
 			return //nolint:nlreturn // no problem
 		}
-		beURL := string(body)
+		bodies := []string{}
+		for _, beURL := range strings.Split(string(body), " ") {
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, beURL, http.NoBody)
+			if err != nil {
+				c.String(http.StatusInternalServerError, err.Error())
+				return //nolint:nlreturn // no problem
+			}
+			httpClient := &http.Client{}
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				c.String(http.StatusInternalServerError, err.Error())
+				return //nolint:nlreturn // no problem
+			}
+			if resp.Body == nil {
+				c.String(http.StatusInternalServerError, "empty response")
+				return //nolint:nlreturn // no problem
+			}
+			beBody, err := io.ReadAll(resp.Body)
+			resp.Body.Close() //nolint:errcheck,gosec // not important
+			if err != nil {
+				c.String(http.StatusInternalServerError, err.Error())
+				return //nolint:nlreturn // no problem
+			}
+			bodies = append(bodies, string(beBody))
+		}
 
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, beURL, http.NoBody)
-		if err != nil {
-			c.String(http.StatusInternalServerError, err.Error())
-			return //nolint:nlreturn // no problem
-		}
-		httpClient := &http.Client{}
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			c.String(http.StatusInternalServerError, err.Error())
-			return //nolint:nlreturn // no problem
-		}
-		if resp.Body == nil {
-			c.String(http.StatusInternalServerError, "empty response")
-			return //nolint:nlreturn // no problem
-		}
-		defer resp.Body.Close() //nolint:errcheck // not important
-		beBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			c.String(http.StatusInternalServerError, err.Error())
-			return //nolint:nlreturn // no problem
-		}
-
-		c.String(http.StatusOK, string(beBody))
+		c.String(http.StatusOK, strings.Join(bodies, " "))
 	})
 	s.serverRunner(router.Handler(), s.shutdown, s.config.ListenAddr, s.log)
 	s.log.Info("Frontend exit")

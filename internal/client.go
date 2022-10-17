@@ -2,6 +2,9 @@ package internal
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/pgillich/opentracing-example/internal/logger"
@@ -32,8 +35,23 @@ func NewClientService(ctx context.Context, cfg interface{}, log logr.Logger) mod
 }
 
 func (c *Client) Run(args []string) error {
-	c.log.Info("Client start")
-	c.log.Info("Client exit")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+c.config.Server+"/proxy", strings.NewReader(strings.Join(args, " ")))
+	if err != nil {
+		return err
+	}
+	httpClient := http.Client{}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.Body != nil {
+		defer resp.Body.Close()
+	}
+	c.log.Info("Client resp", "body", string(body))
 
 	return nil
 }

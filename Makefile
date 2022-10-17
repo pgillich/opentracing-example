@@ -56,14 +56,12 @@ DOCKER_RUN_FLAGS ?= --user $$(id -u):$$(id -g) \
 DOCKERFILE_APP_DIR ?= build
 
 build:
-	cp go.mod internal/buildinfo/_go.mod
 	docker run ${DOCKER_RUN_FLAGS} \
 		${DOCKER_URL_PATH}/${DOCKER_BUILDER_IMAGE} \
 		bash -c ${BUILD_SCRIPTS_DIR}/build.sh
 .PHONY: build
 
 tidy:
-	cp go.mod internal/buildinfo/_go.mod
 	docker run ${DOCKER_RUN_FLAGS} \
 		${DOCKER_URL_PATH}/${DOCKER_BUILDER_IMAGE} \
 		bash -c ${BUILD_SCRIPTS_DIR}/tidy.sh
