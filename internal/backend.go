@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+	chi_middleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-logr/logr"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
 	"github.com/pgillich/opentracing-example/internal/model"
@@ -45,15 +45,36 @@ func NewBackendService(ctx context.Context, cfg interface{}, log logr.Logger) mo
 func (s *Backend) Run(args []string) error {
 	s.log = s.log.WithValues("args", args)
 	s.log.Info("Backend start")
+	var h http.Handler
 
-	e := echo.New()
-	e.Use(EchoLogr(s.log))
-	e.Use(middleware.Recover())
-	e.GET("/ping", func(c echo.Context) error {
-		return c.String(http.StatusOK, s.config.Response) //nolint:wrapcheck // Echo
+	// CHI
+
+	r := chi.NewRouter()
+	r.Use(chi_middleware.RequestLogger(&logger.ChiLogr{Logger: s.log}))
+	r.Use(chi_middleware.Recoverer)
+
+	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := w.Write([]byte(s.config.Response)); err != nil {
+			s.log.Error(err, "unable to send response")
+		}
 	})
-	s.serverRunner(e, s.shutdown, s.config.ListenAddr, s.log)
+	h = r
+
 	/*
+		// ECHO
+
+		e := echo.New()
+		e.Use(EchoLogr(s.log))
+		e.Use(echo_middleware.Recover())
+		e.GET("/ping", func(c echo.Context) error {
+			return c.String(http.StatusOK, s.config.Response) //nolint:wrapcheck // Echo
+		})
+		h = e
+	*/
+
+	/*
+		// GIN
+
 		gin.SetMode(gin.ReleaseMode)
 		router := gin.New()
 		router.Use(ginlogr.Ginlogr(s.log, time.RFC3339, false))
@@ -61,9 +82,11 @@ func (s *Backend) Run(args []string) error {
 		router.GET("/ping", func(c *gin.Context) {
 			c.String(http.StatusOK, s.config.Response)
 		})
-		s.serverRunner(router.Handler(), s.shutdown, s.config.ListenAddr, s.log)
+		h = router.Handler()
 	*/
-	s.log.Info("Backend exit")
+
+	s.serverRunner(h, s.shutdown, s.config.ListenAddr, s.log)
+	s.log.Info("Backend started")
 
 	return nil
 }
