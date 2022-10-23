@@ -10,7 +10,12 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}",
-            "args": ["client", "--server", "127.0.0.1", "Param_1"]
+            "args": [
+                "client",
+                "--server",
+                "127.0.0.1",
+                "Param_1"
+            ]
         },
         {
             "name": "Launch backend",
@@ -18,7 +23,29 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}",
-            "args": ["backend", "--listenaddr", "127.0.0.1:8001", "--response", "PONG"]
+            "args": [
+                "backend",
+                "--listenaddr",
+                "127.0.0.1:55501",
+                "--instance",
+                "backend-1",
+                "--response",
+                "PONG_1"
+            ]
+        },
+        {
+            "name": "Launch frontend",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}",
+            "args": [
+                "frontend",
+                "--listenaddr",
+                "127.0.0.1:55500",
+                "--instance",
+                "frontend-1",
+            ]
         }
     ]
 }

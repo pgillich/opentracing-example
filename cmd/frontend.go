@@ -5,6 +5,8 @@ Copyright © 2022 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"time"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -20,13 +22,18 @@ var frontendCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SetContext(cmd.Parent().Context())
 
-		return RunService(cmd, args, &internal.FrontendConfig{}, internal.NewFrontendService)
+		err := RunService(cmd, args, &internal.FrontendConfig{}, internal.NewFrontendService)
+		time.Sleep(time.Second)
+
+		return err
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(frontendCmd)
 	frontendCmd.Flags().String("listenaddr", "localhost:8882", "Listen address")
+	frontendCmd.Flags().String("instance", "#0", "Frontend instance")
+	frontendCmd.Flags().String("jaegerURL", "http://localhost:14268/api/traces", "Jaeger collector address")
 	if err := viper.BindPFlags(frontendCmd.Flags()); err != nil {
 		logger.GetLogger(frontendCmd.Use).Error(err, "Unable to bind flags")
 		panic(err)

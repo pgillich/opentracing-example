@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -39,11 +40,11 @@ type TestClient struct {
 func (s *E2ETestSuite) TestMoreBackendFromFrontend() {
 	log := logger.GetLogger(s.T().Name())
 
-	beServer1 := runTestServer("backend", "--response", "PONG_1")
+	beServer1 := runTestServer("backend", s.T().Name()+"#backend:1", "--response", "PONG_1")
 	defer beServer1.cancel()
-	beServer2 := runTestServer("backend", "--response", "PONG_2")
+	beServer2 := runTestServer("backend", s.T().Name()+"#backend:2", "--response", "PONG_2")
 	defer beServer2.cancel()
-	feServer1 := runTestServer("frontend")
+	feServer1 := runTestServer("frontend", s.T().Name()+"#backend-1")
 	defer feServer1.cancel()
 
 	s.sendPingFrontend(feServer1, []string{beServer1.addr}, log)
@@ -67,19 +68,19 @@ func (s *E2ETestSuite) sendPingFrontend(feServer *TestServer, beServerAddrs []st
 }
 
 func (s *E2ETestSuite) TestMoreBackendFromClient() {
-	beServer1 := runTestServer("backend", "--response", "PONG_1")
+	beServer1 := runTestServer("backend", s.T().Name()+"#backend:1", "--response", "PONG_1")
 	defer beServer1.cancel()
-	beServer2 := runTestServer("backend", "--response", "PONG_2")
+	beServer2 := runTestServer("backend", s.T().Name()+"#backend:2", "--response", "PONG_2")
 	defer beServer2.cancel()
-	feServer1 := runTestServer("frontend")
+	feServer1 := runTestServer("frontend", s.T().Name()+"#frontend:1")
 	defer feServer1.cancel()
 
-	runTestClient("client", feServer1.addr, "http://"+beServer1.addr+"/ping", "http://"+beServer2.addr+"/ping", "http://"+beServer2.addr+"/ping")
+	runTestClient("client", s.T().Name()+"#client:1", feServer1.addr, "http://"+beServer1.addr+"/ping", "http://"+beServer2.addr+"/ping", "http://"+beServer2.addr+"/ping")
 
 	time.Sleep(1 * time.Second)
 }
 
-func runTestServer(typeName string, args ...string) *TestServer {
+func runTestServer(typeName string, instance string, args ...string) *TestServer {
 	server := &TestServer{
 		testServer: httptest.NewUnstartedServer(nil),
 	}
@@ -87,19 +88,21 @@ func runTestServer(typeName string, args ...string) *TestServer {
 	started := make(chan struct{})
 	runner := TestServerRunner(server.testServer, started)
 	server.ctx, server.cancel = context.WithCancel(context.Background())
-	go cmd.Execute(server.ctx, append([]string{typeName, "--listenaddr", server.addr}, args...), runner)
+	go cmd.Execute(server.ctx, append([]string{typeName, "--listenaddr", server.addr, "--instance", invalidDomainNameRe.ReplaceAllString(instance, "-")}, args...), runner)
 	<-started
 	time.Sleep(1 * time.Second)
 
 	return server
 }
 
-func runTestClient(typeName string, addr string, args ...string) *TestClient {
+var invalidDomainNameRe = regexp.MustCompile(`[^a-zA-Z0-9.-]`)
+
+func runTestClient(typeName string, instance string, addr string, args ...string) *TestClient {
 	server := &TestClient{
 		addr: addr,
 	}
 	server.ctx, server.cancel = context.WithCancel(context.Background())
-	cmd.Execute(server.ctx, append([]string{typeName, "--server", addr}, args...), nil)
+	cmd.Execute(server.ctx, append([]string{typeName, "--server", addr, "--instance", invalidDomainNameRe.ReplaceAllString(instance, "-")}, args...), nil)
 
 	return server
 }

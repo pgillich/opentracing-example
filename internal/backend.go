@@ -7,13 +7,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	chi_middleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-logr/logr"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
 	"github.com/pgillich/opentracing-example/internal/model"
+	"github.com/pgillich/opentracing-example/internal/tracing"
 )
 
 type BackendConfig struct {
 	ListenAddr string
+	Instance   string
+	Command    string
+	JaegerURL  string
 
 	Response string
 }
@@ -47,6 +52,19 @@ func (s *Backend) Run(args []string) error {
 	s.log.Info("Backend start")
 	var h http.Handler
 
+	traceExporter, err := tracing.JaegerProvider(s.config.JaegerURL)
+	if err != nil {
+		return err
+	}
+	tp := tracing.InitTracer(traceExporter, sdktrace.AlwaysSample(),
+		s.config.Instance, s.config.Instance, "",
+	)
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			s.log.Error(err, "Error shutting down tracer provider")
+		}
+	}()
+
 	// CHI
 
 	r := chi.NewRouter()
@@ -54,39 +72,50 @@ func (s *Backend) Run(args []string) error {
 	r.Use(chi_middleware.Recoverer)
 
 	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+		ctx, span := chiSpan(tp, "github.com/pgillich/opentracing-example/backend", "/ping", s.config.Instance, r, s.log)
+		defer func() {
+			spanText, _ := span.SpanContext().MarshalJSON() //nolint:errcheck // not important
+			s.log.WithValues(
+				"service", "backend",
+				"span", string(spanText),
+			).Info("Span END")
+			span.End()
+		}()
+		_ = ctx
+
 		if _, err := w.Write([]byte(s.config.Response)); err != nil {
 			s.log.Error(err, "unable to send response")
 		}
 	})
 	h = r
 
-	/*
-		// ECHO
-
-		e := echo.New()
-		e.Use(EchoLogr(s.log))
-		e.Use(echo_middleware.Recover())
-		e.GET("/ping", func(c echo.Context) error {
-			return c.String(http.StatusOK, s.config.Response) //nolint:wrapcheck // Echo
-		})
-		h = e
-	*/
-
-	/*
-		// GIN
-
-		gin.SetMode(gin.ReleaseMode)
-		router := gin.New()
-		router.Use(ginlogr.Ginlogr(s.log, time.RFC3339, false))
-		router.Use(ginlogr.RecoveryWithLogr(s.log, time.RFC3339, false, true))
-		router.GET("/ping", func(c *gin.Context) {
-			c.String(http.StatusOK, s.config.Response)
-		})
-		h = router.Handler()
-	*/
-
 	s.serverRunner(h, s.shutdown, s.config.ListenAddr, s.log)
 	s.log.Info("Backend started")
 
 	return nil
 }
+
+/*
+	// ECHO
+
+	e := echo.New()
+	e.Use(EchoLogr(s.log))
+	e.Use(echo_middleware.Recover())
+	e.GET("/ping", func(c echo.Context) error {
+		return c.String(http.StatusOK, s.config.Response) //nolint:wrapcheck // Echo
+	})
+	h = e
+*/
+
+/*
+	// GIN
+
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.New()
+	router.Use(ginlogr.Ginlogr(s.log, time.RFC3339, false))
+	router.Use(ginlogr.RecoveryWithLogr(s.log, time.RFC3339, false, true))
+	router.GET("/ping", func(c *gin.Context) {
+		c.String(http.StatusOK, s.config.Response)
+	})
+	h = router.Handler()
+*/

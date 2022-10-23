@@ -19,6 +19,9 @@ type ChiLogrEntry struct {
 }
 
 func (e ChiLogrEntry) Write(status, bytes int, header http.Header, elapsed time.Duration, extra interface{}) {
+	if extra == nil {
+		extra = "Chi"
+	}
 	e.WithValues(
 		"status", status,
 		"bytes", bytes,

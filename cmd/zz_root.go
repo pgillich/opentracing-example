@@ -92,5 +92,7 @@ func RunService(cmd *cobra.Command, args []string, config interface{}, newServic
 		return err
 	}
 
+	log.WithValues("config", config, "type", cmd.Use).Info("Running...")
+
 	return errors.Wrap(newService(cmd.Context(), config, log).Run(args), "service run")
 }
