@@ -1,19 +1,26 @@
 # opentracing-example
+
 OpenTracing example
 
-# Introduction
+## Introduction
 
-It's an example implementation for my article on medium.com.
+It's an example implementation for my article on <https://pgillich.medium.com/multi-hop-tracing-with-opentelemetry-in-golang-792df5feb37c>
 
-# Running
+## Running
 
-## Getting the code
+## Starting Jaeger a server
+
+```sh
+docker run -d --name jaeger -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 -e COLLECTOR_OTLP_ENABLED=true -p 6831:6831/udp -p 6832:6832/udp -p 5778:5778 -p 16686:16686 -p 4317:4317 -p 4318:4318 -p 14250:14250 -p 14268:14268 -p 14269:14269 -p 9411:9411 jaegertracing/all-in-one:1.38
+```
+
+## Getting the source code
 
 ```sh
 git clone https://github.com/pgillich/opentracing-example.git
 ```
 
-## Running in CLI
+### Running in CLI
 
 Compiling the binary (Go 1.18):
 
@@ -41,6 +48,6 @@ Example command to send request to frontend without client:
 curl -X GET http://127.0.0.1:55500/proxy --data-binary 'http://127.0.0.1:55501/ping http://127.0.0.1:55502/ping http://127.0.0.1:55502/ping'
 ```
 
-## Running as unit test
+### Running as unit test
 
 Test cases are in `test/e2e_test.go`.

@@ -1,14 +1,15 @@
 package tracing
 
 import (
+	"net/http"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-logr/logr"
-	"github.com/pgillich/opentracing-example/internal/buildinfo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/baggage"
@@ -17,6 +18,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.11.0"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/pgillich/opentracing-example/internal/buildinfo"
 )
 
 type ErrorHandler struct {
@@ -63,6 +67,77 @@ func InitTracer(exporter sdktrace.SpanExporter, sampler sdktrace.Sampler, servic
 	onceSetOtel.Do(onceBodySetOtel)
 
 	return tp
+}
+
+func ChiTracerMiddleware(tr trace.Tracer, instance string, l logr.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			routePath := chi.RouteContext(r.Context()).RoutePath
+			if routePath == "" {
+				if r.URL.RawPath != "" {
+					routePath = r.URL.RawPath
+				} else {
+					routePath = r.URL.Path
+				}
+			}
+
+			ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+			span := trace.SpanFromContext(ctx)
+			clientCommand := ""
+			if span.SpanContext().IsValid() {
+				spanValues, spanValuesErr := span.SpanContext().MarshalJSON()
+				l.WithValues(
+					"span", spanValues,
+					"spanErr", spanValuesErr,
+					"bag", baggage.FromContext(ctx).String(),
+				).Info("IN Span")
+				clientCommand = span.SpanContext().TraceState().Get(StateKeyClientCommand)
+			} else {
+				command := r.Method + " " + r.URL.String()
+
+				traceState := trace.TraceState{}
+				traceState, err := traceState.Insert(StateKeyClientCommand, EncodeTracestateValue(command))
+				if err != nil {
+					l.Error(err, "unable to set command in state")
+				}
+				ctx = trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
+					TraceState: traceState,
+				}))
+				bag, err := NewBaggage(instance, command)
+				if err != nil {
+					l.Error(err, "unable to set command in baggage")
+				}
+				ctx = baggage.ContextWithBaggage(ctx, bag)
+
+				spanValues, spanValuesErr := trace.SpanFromContext(ctx).SpanContext().MarshalJSON()
+				l.WithValues(
+					"span", spanValues,
+					"spanErr", spanValuesErr,
+					"bag", bag,
+				).Info("NEW Span")
+			}
+
+			ctx, span = tr.Start(ctx, "IN HTTP "+r.Method+" "+r.URL.String(),
+				trace.WithAttributes(semconv.NetAttributesFromHTTPRequest("tcp", r)...),
+				trace.WithAttributes(semconv.HTTPClientAttributesFromHTTPRequest(r)...),
+				trace.WithAttributes(semconv.HTTPServerAttributesFromHTTPRequest(instance, routePath, r)...),
+				trace.WithSpanKind(trace.SpanKindServer),
+				trace.WithAttributes(attribute.String(StateKeyClientCommand, clientCommand)),
+			)
+
+			uk := attribute.Key("username") // from HTTP header
+			span.AddEvent("IN req from user", trace.WithAttributes(append(append(
+				semconv.HTTPServerAttributesFromHTTPRequest(instance, routePath, r),
+				semconv.HTTPClientAttributesFromHTTPRequest(r)...),
+				uk.String("testUser"),
+			)...))
+
+			r = r.WithContext(ctx)
+			next.ServeHTTP(w, r)
+		}
+
+		return http.HandlerFunc(fn)
+	}
 }
 
 func JaegerProvider(url string) (sdktrace.SpanExporter, error) {

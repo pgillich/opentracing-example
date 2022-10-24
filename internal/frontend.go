@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type FrontendConfig struct {
@@ -86,12 +87,17 @@ func (s *Frontend) Run(args []string) error {
 			s.log.Error(err, "Error shutting down tracer provider")
 		}
 	}()
+	tr := tp.Tracer(
+		"github.com/pgillich/opentracing-example/frontend",
+		trace.WithInstrumentationVersion(tracing.SemVersion()),
+	)
 
 	// CHI
 
 	r := chi.NewRouter()
 	r.Use(chi_middleware.RequestLogger(&logger.ChiLogr{Logger: s.log}))
 	r.Use(chi_middleware.Recoverer)
+	r.Use(tracing.ChiTracerMiddleware(tr, s.config.Instance, s.log))
 
 	r.Get("/proxy", func(w http.ResponseWriter, r *http.Request) {
 		if r.Body == nil {
@@ -107,7 +113,8 @@ func (s *Frontend) Run(args []string) error {
 			return
 		}
 
-		ctx, span := chiSpan(tp, "github.com/pgillich/opentracing-example/frontend", "/proxy", s.config.Instance, r, s.log)
+		ctx := r.Context()
+		span := trace.SpanFromContext(ctx)
 		defer func() {
 			spanText, _ := span.SpanContext().MarshalJSON() //nolint:errcheck // not important
 			s.log.WithValues(

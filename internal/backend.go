@@ -8,6 +8,7 @@ import (
 	chi_middleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-logr/logr"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
 	"github.com/pgillich/opentracing-example/internal/model"
@@ -87,15 +88,21 @@ func (s *Backend) Run(args []string) error {
 			s.log.Error(err, "Error shutting down tracer provider")
 		}
 	}()
+	tr := tp.Tracer(
+		"github.com/pgillich/opentracing-example/backend",
+		trace.WithInstrumentationVersion(tracing.SemVersion()),
+	)
 
 	// CHI
 
 	r := chi.NewRouter()
 	r.Use(chi_middleware.RequestLogger(&logger.ChiLogr{Logger: s.log}))
 	r.Use(chi_middleware.Recoverer)
+	r.Use(tracing.ChiTracerMiddleware(tr, s.config.Instance, s.log))
 
 	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		ctx, span := chiSpan(tp, "github.com/pgillich/opentracing-example/backend", "/ping", s.config.Instance, r, s.log)
+		ctx := r.Context()
+		span := trace.SpanFromContext(ctx)
 		defer func() {
 			spanText, _ := span.SpanContext().MarshalJSON() //nolint:errcheck // not important
 			s.log.WithValues(
@@ -105,7 +112,6 @@ func (s *Backend) Run(args []string) error {
 			span.End()
 			tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
 		}()
-		_ = ctx
 
 		if _, err := w.Write([]byte(s.config.Response)); err != nil {
 			s.log.Error(err, "unable to send response")
