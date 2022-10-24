@@ -22,7 +22,7 @@ var backendCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SetContext(cmd.Parent().Context())
 
-		err := RunService(cmd, args, &internal.BackendConfig{}, internal.NewBackendService)
+		err := RunService(cmd.Context(), cmd.Use, args, &internal.BackendConfig{}, internal.NewBackendService)
 		time.Sleep(time.Second)
 
 		return err

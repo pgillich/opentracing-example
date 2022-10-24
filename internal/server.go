@@ -16,6 +16,14 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+type ConfigSetter interface {
+	SetListenAddr(string)
+	SetInstance(string)
+	SetCommand(string)
+	SetJaegerURL(string)
+	GetOptions() []string
+}
+
 var ErrInvalidServerRunner = errors.NewPlain("invalid server runner")
 
 func RunServer(h http.Handler, shutdown <-chan struct{}, addr string, log logr.Logger) {
@@ -49,18 +57,20 @@ func chiSpan(tp *sdktrace.TracerProvider, tracerName string, route string, insta
 	tr := tp.Tracer(tracerName, trace.WithInstrumentationVersion(tracing.SemVersion()))
 	ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 	span := trace.SpanFromContext(ctx)
+	clientCommand := ""
 	if span.SpanContext().IsValid() {
 		spanValues, spanValuesErr := span.SpanContext().MarshalJSON()
 		l.WithValues(
 			"span", spanValues,
 			"spanErr", spanValuesErr,
-			"bag", baggage.FromContext(ctx),
+			"bag", baggage.FromContext(ctx).String(),
 		).Info("IN Span")
+		clientCommand = span.SpanContext().TraceState().Get(tracing.StateKeyClientCommand)
 	} else {
 		command := r.Method + " " + r.URL.String()
 
 		traceState := trace.TraceState{}
-		traceState, err := traceState.Insert("state_command", tracing.EncodeTracestateValue(command))
+		traceState, err := traceState.Insert(tracing.StateKeyClientCommand, tracing.EncodeTracestateValue(command))
 		if err != nil {
 			l.Error(err, "unable to set command in state")
 		}
@@ -81,12 +91,16 @@ func chiSpan(tp *sdktrace.TracerProvider, tracerName string, route string, insta
 		).Info("NEW Span")
 	}
 
-	ctx, span = tr.Start(ctx, "IN HTTP",
+	ctx, span = tr.Start(ctx, "IN HTTP "+r.Method+" "+r.URL.String(),
 		trace.WithAttributes(semconv.NetAttributesFromHTTPRequest("tcp", r)...),
 		trace.WithAttributes(semconv.HTTPClientAttributesFromHTTPRequest(r)...),
 		trace.WithAttributes(semconv.HTTPServerAttributesFromHTTPRequest(instance, route, r)...),
 		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(attribute.String(tracing.StateKeyClientCommand, clientCommand)),
 	)
+
+	bar := baggage.FromContext(ctx)
+	_ = bar
 
 	uk := attribute.Key("username") // from HTTP header
 	span.AddEvent("IN req from user", trace.WithAttributes(append(append(

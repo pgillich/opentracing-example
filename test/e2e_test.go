@@ -12,7 +12,9 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/pgillich/opentracing-example/cmd"
+	"github.com/pgillich/opentracing-example/internal"
 	"github.com/pgillich/opentracing-example/internal/logger"
+	"github.com/pgillich/opentracing-example/internal/model"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -40,11 +42,11 @@ type TestClient struct {
 func (s *E2ETestSuite) TestMoreBackendFromFrontend() {
 	log := logger.GetLogger(s.T().Name())
 
-	beServer1 := runTestServer("backend", s.T().Name()+"#backend:1", "--response", "PONG_1")
+	beServer1 := runTestServer("backend", "backend-1", &internal.BackendConfig{}, []string{"PONG_1"}, internal.NewBackendService, log)
 	defer beServer1.cancel()
-	beServer2 := runTestServer("backend", s.T().Name()+"#backend:2", "--response", "PONG_2")
+	beServer2 := runTestServer("backend", "backend-2", &internal.BackendConfig{}, []string{"PONG_2"}, internal.NewBackendService, log)
 	defer beServer2.cancel()
-	feServer1 := runTestServer("frontend", s.T().Name()+"#backend-1")
+	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{}, internal.NewFrontendService, log)
 	defer feServer1.cancel()
 
 	s.sendPingFrontend(feServer1, []string{beServer1.addr}, log)
@@ -68,19 +70,21 @@ func (s *E2ETestSuite) sendPingFrontend(feServer *TestServer, beServerAddrs []st
 }
 
 func (s *E2ETestSuite) TestMoreBackendFromClient() {
-	beServer1 := runTestServer("backend", s.T().Name()+"#backend:1", "--response", "PONG_1")
+	log := logger.GetLogger(s.T().Name())
+
+	beServer1 := runTestServer("backend", "backend-1", &internal.BackendConfig{}, []string{"PONG_1"}, internal.NewBackendService, log)
 	defer beServer1.cancel()
-	beServer2 := runTestServer("backend", s.T().Name()+"#backend:2", "--response", "PONG_2")
+	beServer2 := runTestServer("backend", "backend-2", &internal.BackendConfig{}, []string{"PONG_2"}, internal.NewBackendService, log)
 	defer beServer2.cancel()
-	feServer1 := runTestServer("frontend", s.T().Name()+"#frontend:1")
+	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{}, internal.NewFrontendService, log)
 	defer feServer1.cancel()
 
-	runTestClient("client", s.T().Name()+"#client:1", feServer1.addr, "http://"+beServer1.addr+"/ping", "http://"+beServer2.addr+"/ping", "http://"+beServer2.addr+"/ping")
+	runTestClient("client", "client-1", feServer1.addr, "http://"+beServer1.addr+"/ping", "http://"+beServer2.addr+"/ping", "http://"+beServer2.addr+"/ping")
 
 	time.Sleep(1 * time.Second)
 }
 
-func runTestServer(typeName string, instance string, args ...string) *TestServer {
+func runTestServer(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log logr.Logger) *TestServer {
 	server := &TestServer{
 		testServer: httptest.NewUnstartedServer(nil),
 	}
@@ -88,9 +92,20 @@ func runTestServer(typeName string, instance string, args ...string) *TestServer
 	started := make(chan struct{})
 	runner := TestServerRunner(server.testServer, started)
 	server.ctx, server.cancel = context.WithCancel(context.Background())
-	go cmd.Execute(server.ctx, append([]string{typeName, "--listenaddr", server.addr, "--instance", invalidDomainNameRe.ReplaceAllString(instance, "-")}, args...), runner)
+	config.SetListenAddr(server.addr)
+	config.SetInstance(invalidDomainNameRe.ReplaceAllString(instance, "-"))
+	config.SetJaegerURL("http://localhost:14268/api/traces")
+	command := strings.Join(append(append([]string{typeName}, config.GetOptions()...), args...), " ")
+	config.SetCommand(command)
+	ctx := context.WithValue(server.ctx, model.CtxKeyCmd, command)
+	ctx = context.WithValue(ctx, model.CtxKeyServerRunner, runner)
+	go func() {
+		if err := newService(ctx, config, log).Run(args); err != nil {
+			log.Error(err, "RunService")
+		}
+	}()
 	<-started
-	time.Sleep(1 * time.Second)
+	//time.Sleep(1 * time.Second)
 
 	return server
 }

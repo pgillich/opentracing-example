@@ -11,6 +11,7 @@ import (
 	"github.com/pgillich/opentracing-example/internal/model"
 	"github.com/pgillich/opentracing-example/internal/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/baggage"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.11.0"
@@ -44,12 +45,14 @@ func NewClientService(ctx context.Context, cfg interface{}, log logr.Logger) mod
 }
 
 func (c *Client) Run(args []string) error {
+	c.log.WithValues("config", c.config).Info("Client start")
+
 	traceExporter, err := tracing.JaegerProvider(c.config.JaegerURL)
 	if err != nil {
 		return err
 	}
 	tp := tracing.InitTracer(traceExporter, sdktrace.AlwaysSample(),
-		c.config.Instance, c.config.Instance, c.config.Command,
+		c.config.Instance, c.config.Instance, c.config.Command, c.log,
 	)
 	defer func() {
 		//nolint:govet // local err
@@ -59,14 +62,14 @@ func (c *Client) Run(args []string) error {
 	}()
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(
 		http.DefaultTransport,
-		//otelhttp.WithPropagators(tracing.GetPropagators()),
+		otelhttp.WithPropagators(otel.GetTextMapPropagator()),
 	)}
 	tr := tp.Tracer("github.com/pgillich/opentracing-example/client", trace.WithInstrumentationVersion(tracing.SemVersion()))
 
 	ctx := context.Background()
 
 	traceState := trace.TraceState{}
-	traceState, err = traceState.Insert("state_command", tracing.EncodeTracestateValue(c.config.Command))
+	traceState, err = traceState.Insert(tracing.StateKeyClientCommand, tracing.EncodeTracestateValue(c.config.Command))
 	if err != nil {
 		c.log.Error(err, "unable to set command in state")
 	} else {
@@ -81,7 +84,9 @@ func (c *Client) Run(args []string) error {
 	}
 	ctx = baggage.ContextWithBaggage(ctx, bag)
 
-	ctx, span := tr.Start(ctx, "Run",
+	// 	otel.SetTracerProvider(tp)
+
+	ctx, span := tr.Start(ctx, "Run "+c.config.Command,
 		trace.WithAttributes(semconv.PeerServiceKey.String("ExampleClientService")),
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
@@ -92,6 +97,7 @@ func (c *Client) Run(args []string) error {
 			"span", string(spanText),
 		).Info("Span END")
 		span.End()
+		tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
 	}()
 
 	return c.run(ctx, httpClient, strings.Join(args, " "))

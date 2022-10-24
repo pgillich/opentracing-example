@@ -24,7 +24,7 @@ var clientCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SetContext(cmd.Parent().Context())
 
-		err := RunService(cmd, args, &internal.ClientConfig{
+		err := RunService(cmd.Context(), cmd.Use, args, &internal.ClientConfig{
 			Command: fmt.Sprintf("%+v", cmd.Context().Value(model.CtxKeyCmd)),
 		}, internal.NewClientService)
 		time.Sleep(time.Second)

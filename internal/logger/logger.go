@@ -19,7 +19,9 @@ func GetLogger(app string) logr.Logger {
 	if logger, has := loggers[app]; has {
 		return logger
 	}
-	loggers[app] = logrusr.New(logrus.New()).WithName(app)
+	lr := logrus.New()
+	lr.Level = logrus.TraceLevel
+	loggers[app] = logrusr.New(lr).WithName(app)
 
 	return loggers[app]
 }

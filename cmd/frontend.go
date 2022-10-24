@@ -22,7 +22,7 @@ var frontendCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SetContext(cmd.Parent().Context())
 
-		err := RunService(cmd, args, &internal.FrontendConfig{}, internal.NewFrontendService)
+		err := RunService(cmd.Context(), cmd.Use, args, &internal.FrontendConfig{}, internal.NewFrontendService)
 		time.Sleep(time.Second)
 
 		return err

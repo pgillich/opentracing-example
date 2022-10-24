@@ -23,6 +23,26 @@ type BackendConfig struct {
 	Response string
 }
 
+func (c *BackendConfig) SetListenAddr(addr string) {
+	c.ListenAddr = addr
+}
+
+func (c *BackendConfig) SetInstance(instance string) {
+	c.Instance = instance
+}
+
+func (c *BackendConfig) SetJaegerURL(url string) {
+	c.JaegerURL = url
+}
+
+func (c *BackendConfig) SetCommand(command string) {
+	c.Command = command
+}
+
+func (c *BackendConfig) GetOptions() []string {
+	return []string{"--listenaddr", c.ListenAddr, "--instance", c.Instance}
+}
+
 type Backend struct {
 	config       BackendConfig
 	serverRunner model.ServerRunner
@@ -49,15 +69,18 @@ func NewBackendService(ctx context.Context, cfg interface{}, log logr.Logger) mo
 
 func (s *Backend) Run(args []string) error {
 	s.log = s.log.WithValues("args", args)
-	s.log.Info("Backend start")
 	var h http.Handler
+	if len(args) > 0 {
+		s.config.Response = args[0]
+	}
+	s.log.WithValues("config", s.config).Info("Backend start")
 
 	traceExporter, err := tracing.JaegerProvider(s.config.JaegerURL)
 	if err != nil {
 		return err
 	}
 	tp := tracing.InitTracer(traceExporter, sdktrace.AlwaysSample(),
-		s.config.Instance, s.config.Instance, "",
+		s.config.Instance, s.config.Instance, "", s.log,
 	)
 	defer func() {
 		if err := tp.Shutdown(context.Background()); err != nil {
@@ -80,6 +103,7 @@ func (s *Backend) Run(args []string) error {
 				"span", string(spanText),
 			).Info("Span END")
 			span.End()
+			tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
 		}()
 		_ = ctx
 

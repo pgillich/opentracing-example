@@ -14,6 +14,7 @@ import (
 	"github.com/pgillich/opentracing-example/internal/model"
 	"github.com/pgillich/opentracing-example/internal/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -22,6 +23,26 @@ type FrontendConfig struct {
 	Instance   string
 	Command    string
 	JaegerURL  string
+}
+
+func (c *FrontendConfig) SetListenAddr(addr string) {
+	c.ListenAddr = addr
+}
+
+func (c *FrontendConfig) SetInstance(instance string) {
+	c.Instance = instance
+}
+
+func (c *FrontendConfig) SetJaegerURL(url string) {
+	c.JaegerURL = url
+}
+
+func (c *FrontendConfig) SetCommand(command string) {
+	c.Command = command
+}
+
+func (c *FrontendConfig) GetOptions() []string {
+	return []string{"--listenaddr", c.ListenAddr, "--instance", c.Instance}
 }
 
 type Frontend struct {
@@ -50,15 +71,15 @@ func NewFrontendService(ctx context.Context, cfg interface{}, log logr.Logger) m
 
 func (s *Frontend) Run(args []string) error {
 	s.log = s.log.WithValues("args", args)
-	s.log.Info("Frontend start")
 	var h http.Handler
+	s.log.WithValues("config", s.config).Info("Frontend start")
 
 	traceExporter, err := tracing.JaegerProvider(s.config.JaegerURL)
 	if err != nil {
 		return err
 	}
 	tp := tracing.InitTracer(traceExporter, sdktrace.AlwaysSample(),
-		"frontend", s.config.Instance, "",
+		s.config.Instance, s.config.Instance, "", s.log,
 	)
 	defer func() {
 		if err := tp.Shutdown(context.Background()); err != nil {
@@ -94,6 +115,7 @@ func (s *Frontend) Run(args []string) error {
 				"span", string(spanText),
 			).Info("Span END")
 			span.End()
+			tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
 		}()
 
 		bodies := []string{}
@@ -120,13 +142,15 @@ func (s *Frontend) Run(args []string) error {
 }
 
 func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, beURL, http.NoBody)
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodGet, beURL, http.NoBody,
+	)
 	if err != nil {
 		return "", errors.Wrap(err, "unable to send request")
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(
 		http.DefaultTransport,
-		//otelhttp.WithPropagators(tracing.GetPropagators()),
+		otelhttp.WithPropagators(otel.GetTextMapPropagator()),
 	)}
 	resp, err := httpClient.Do(req)
 	if err != nil {

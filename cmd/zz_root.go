@@ -84,15 +84,15 @@ func initConfig() {
 	}
 }
 
-func RunService(cmd *cobra.Command, args []string, config interface{}, newService model.NewService) error {
-	commandLine := cmd.Context().Value(model.CtxKeyCmd)
-	log := logger.GetLogger(cmd.Use).WithValues(logger.KeyCmd, commandLine)
+func RunService(ctx context.Context, serviceType string, args []string, config interface{}, newService model.NewService) error {
+	commandLine := ctx.Value(model.CtxKeyCmd)
+	log := logger.GetLogger(serviceType).WithValues(logger.KeyCmd, commandLine)
 
 	if err := viper.Unmarshal(config); err != nil {
 		return err
 	}
 
-	log.WithValues("config", config, "type", cmd.Use).Info("Running...")
+	log.WithValues("config", config, "type", serviceType).Info("Running...")
 
-	return errors.Wrap(newService(cmd.Context(), config, log).Run(args), "service run")
+	return errors.Wrap(newService(ctx, config, log).Run(args), "service run")
 }
