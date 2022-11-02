@@ -55,11 +55,14 @@ func InitTracer(exporter sdktrace.SpanExporter, sampler sdktrace.Sampler, servic
 	if command != "" {
 		attrs = append(attrs, attribute.String(StateKeyClientCommand, command))
 	}
-	tp := sdktrace.NewTracerProvider(
+	providerOptions := []sdktrace.TracerProviderOption{
 		sdktrace.WithSampler(sampler),
-		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(resource.NewWithAttributes(semconv.SchemaURL, attrs...)),
-	)
+	}
+	if exporter != nil {
+		providerOptions = append(providerOptions, sdktrace.WithBatcher(exporter))
+	}
+	tp := sdktrace.NewTracerProvider(providerOptions...)
 
 	if errorHandler.log == nil {
 		errorHandler.log = &log
@@ -141,6 +144,10 @@ func ChiTracerMiddleware(tr trace.Tracer, instance string, l logr.Logger) func(n
 }
 
 func JaegerProvider(url string) (sdktrace.SpanExporter, error) {
+	if url == "" || url == "-" {
+		return nil, nil
+	}
+
 	return jaeger.New(jaeger.WithCollectorEndpoint(
 		jaeger.WithEndpoint(url),
 	))

@@ -51,3 +51,29 @@ curl -X GET http://127.0.0.1:55500/proxy --data-binary 'http://127.0.0.1:55501/p
 ### Running as unit test
 
 Test cases are in `test/e2e_test.go`.
+
+### Running in Kubernetes
+
+Add below line to `/etc/hosts` similar to:
+
+```text
+172.18.255.128  opentracing-example.kind-01.company.com
+```
+
+```sh
+make build image
+kind load docker-image pgillich/opentracing-example:v0.0.1 --name demo
+sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
+```
+
+Running servers:
+
+```sh
+kubectl apply -k deployments/kustomize/
+```
+
+Running client:
+
+```sh
+SERVER=opentracing-example.kind-01.company.com INSTANCE=client-1 JAEGERURL=http://jaeger-collector.kind-01.company.com/api/traces ./build/bin/opentracing-example client http://backend:55501/ping http://backend:55501/ping http://backend:55501/ping
+```

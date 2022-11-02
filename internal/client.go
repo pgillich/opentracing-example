@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -51,8 +52,11 @@ func (c *Client) Run(args []string) error {
 	if err != nil {
 		return err
 	}
+	if c.config.Instance == "-" {
+		c.config.Instance, _ = os.Hostname() //nolint:errcheck // not important
+	}
 	tp := tracing.InitTracer(traceExporter, sdktrace.AlwaysSample(),
-		c.config.Instance, c.config.Instance, c.config.Command, c.log,
+		"client.opentracing-example", c.config.Instance, c.config.Command, c.log,
 	)
 	defer func() {
 		//nolint:govet // local err

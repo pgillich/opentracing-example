@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"emperror.dev/errors"
@@ -73,6 +74,9 @@ func NewFrontendService(ctx context.Context, cfg interface{}, log logr.Logger) m
 func (s *Frontend) Run(args []string) error {
 	s.log = s.log.WithValues("args", args)
 	var h http.Handler
+	if s.config.Instance == "-" {
+		s.config.Instance, _ = os.Hostname() //nolint:errcheck // not important
+	}
 	s.log.WithValues("config", s.config).Info("Frontend start")
 
 	traceExporter, err := tracing.JaegerProvider(s.config.JaegerURL)
@@ -80,7 +84,7 @@ func (s *Frontend) Run(args []string) error {
 		return err
 	}
 	tp := tracing.InitTracer(traceExporter, sdktrace.AlwaysSample(),
-		s.config.Instance, s.config.Instance, "", s.log,
+		"frontend.opentracing-example", s.config.Instance, "", s.log,
 	)
 	defer func() {
 		if err := tp.Shutdown(context.Background()); err != nil {

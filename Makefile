@@ -14,7 +14,7 @@ DOCKER_MDLINT_IMAGE ?= markdownlint-cli2:${DOCKER_MDLINT_VERSION}
 DOCKER_MDLINT_PATH ?= davidanson
 
 API_PACKAGE_NAME ?= opentracing-example
-APP_NAME ?= client
+APP_NAME ?= ${API_PACKAGE_NAME}
 
 SRC_DIR ?= /build
 BUILD_SCRIPTS_DIR ?= ${SRC_DIR}/build/scripts
@@ -29,11 +29,15 @@ SHELLCHECK_SOURCEPATH ?= ${BUILD_SCRIPTS_DIR}
 BUILD_VERSION ?= $(shell git describe --tags)
 BUILD_TIME = $(shell date +%FT%T%z)
 
+DOCKER_APP_IMAGE ?= ${APP_NAME}:${BUILD_VERSION}
+DOCKER_APP_PATH ?= pgillich
+
 export DOCKER_BUILDKIT=1
 
 DEBUG_SCRIPTS ?=
 
 DOCKER_RUN_FLAGS ?= --user $$(id -u):$$(id -g) \
+	--network host \
 	-v /etc/group:/etc/group:ro \
 	-v /etc/passwd:/etc/passwd:ro \
 	-v /etc/shadow:/etc/shadow:ro \
@@ -95,3 +99,21 @@ mdlint:
 
 check: lint test shellcheck mdlint
 .PHONY: check
+
+image:
+	docker build \
+	    --network host \
+		--build-arg APP_NAME=${APP_NAME} \
+		--tag ${DOCKER_APP_PATH}/${DOCKER_APP_IMAGE} \
+		.
+.PHONY: image
+
+image-push:
+	docker image push \
+		${DOCKER_APP_PATH}/${DOCKER_APP_IMAGE}
+.PHONY: image-push
+
+image-kind:
+	kind load docker-image ${DOCKER_APP_PATH}/${DOCKER_APP_IMAGE} --name demo
+	sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
+.PHONY: image-kind

@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: backend
+spec:
+  serviceName: backend
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        version: v0.0.1
+    spec:
+      containers:
+      - name: backend
+        image: pgillich/opentracing-example:v0.0.1
+        imagePullPolicy: "IfNotPresent"
+        command: ["/usr/local/bin/opentracing-example"]
+        args: ["backend", "--response", "PONG_"]
+        ports:
+          - containerPort: 55501
+        env:
+        - name: LISTENADDR
+          value: ":55501"
+        - name: INSTANCE
+          value: "-"
+        - name: JAEGERURL
+          value: "http://jaeger-collector.istio-system.svc:14268/api/traces"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  type: ClusterIP
+  ports:
+   - port: 55501
+  selector:
+   app: backend

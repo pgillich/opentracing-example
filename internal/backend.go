@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	chi_middleware "github.com/go-chi/chi/v5/middleware"
@@ -74,6 +75,10 @@ func (s *Backend) Run(args []string) error {
 	if len(args) > 0 {
 		s.config.Response = args[0]
 	}
+	hostname, _ := os.Hostname() //nolint:errcheck // not important
+	if s.config.Instance == "-" {
+		s.config.Instance = hostname
+	}
 	s.log.WithValues("config", s.config).Info("Backend start")
 
 	traceExporter, err := tracing.JaegerProvider(s.config.JaegerURL)
@@ -81,7 +86,7 @@ func (s *Backend) Run(args []string) error {
 		return err
 	}
 	tp := tracing.InitTracer(traceExporter, sdktrace.AlwaysSample(),
-		s.config.Instance, s.config.Instance, "", s.log,
+		"backend.opentracing-example", s.config.Instance, "", s.log,
 	)
 	defer func() {
 		if err := tp.Shutdown(context.Background()); err != nil {
@@ -113,7 +118,7 @@ func (s *Backend) Run(args []string) error {
 			tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
 		}()
 
-		if _, err := w.Write([]byte(s.config.Response)); err != nil {
+		if _, err := w.Write([]byte(s.config.Response + hostname)); err != nil {
 			s.log.Error(err, "unable to send response")
 		}
 	})
