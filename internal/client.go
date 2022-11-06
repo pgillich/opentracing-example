@@ -13,6 +13,7 @@ import (
 	"github.com/pgillich/opentracing-example/internal/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/baggage"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.11.0"
@@ -67,6 +68,9 @@ func (c *Client) Run(args []string) error {
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(
 		http.DefaultTransport,
 		otelhttp.WithPropagators(otel.GetTextMapPropagator()),
+		otelhttp.WithSpanOptions(trace.WithAttributes(
+			attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),
+		)),
 	)}
 	tr := tp.Tracer("github.com/pgillich/opentracing-example/client", trace.WithInstrumentationVersion(tracing.SemVersion()))
 

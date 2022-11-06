@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         app: frontend
+        component: opentracing-example
         version: v0.0.1
     spec:
       containers:

@@ -16,6 +16,7 @@ import (
 	"github.com/pgillich/opentracing-example/internal/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -162,6 +163,9 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(
 		http.DefaultTransport,
 		otelhttp.WithPropagators(otel.GetTextMapPropagator()),
+		otelhttp.WithSpanOptions(trace.WithAttributes(
+			attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),
+		)),
 	)}
 	resp, err := httpClient.Do(req)
 	if err != nil {

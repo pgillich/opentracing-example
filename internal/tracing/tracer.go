@@ -39,14 +39,18 @@ var onceBodySetOtel = func() { //nolint:gochecknoglobals // local once
 	otel.SetLogger(*errorHandler.log)
 }
 
-const StateKeyClientCommand = "client_command"
+const (
+	StateKeyClientCommand = "client_command"
+	SpanKeyComponent      = "component"
+	SpanKeyComponentValue = "opentracing-example"
+)
 
 func InitTracer(exporter sdktrace.SpanExporter, sampler sdktrace.Sampler, service string, instance string, command string, log logr.Logger) *sdktrace.TracerProvider {
 	// For the demonstration, use sdktrace.AlwaysSample sampler to sample all traces.
 	// In a production application, use sdktrace.ProbabilitySampler with a desired probability.
 	// semconv keys are defined in https://github.com/open-telemetry/opentelemetry-specification/tree/main/semantic_conventions/trace
 	attrs := []attribute.KeyValue{
-		semconv.ServiceNamespaceKey.String("demo"),
+		semconv.ServiceNamespaceKey.String("opentracing-example"),
 		semconv.ServiceNameKey.String(service),
 		semconv.ServiceInstanceIDKey.String(instance),
 		semconv.ServiceVersionKey.String(buildinfo.Version),
@@ -125,7 +129,10 @@ func ChiTracerMiddleware(tr trace.Tracer, instance string, l logr.Logger) func(n
 				trace.WithAttributes(semconv.HTTPClientAttributesFromHTTPRequest(r)...),
 				trace.WithAttributes(semconv.HTTPServerAttributesFromHTTPRequest(instance, routePath, r)...),
 				trace.WithSpanKind(trace.SpanKindServer),
-				trace.WithAttributes(attribute.String(StateKeyClientCommand, clientCommand)),
+				trace.WithAttributes(
+					attribute.String(StateKeyClientCommand, clientCommand),
+					attribute.String(SpanKeyComponent, SpanKeyComponentValue),
+				),
 			)
 
 			uk := attribute.Key("username") // from HTTP header
