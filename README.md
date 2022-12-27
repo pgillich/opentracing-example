@@ -54,6 +54,8 @@ Test cases are in `test/e2e_test.go`.
 
 ### Running in Kubernetes
 
+Below examples are working with <https://github.com/pgillich/kind-on-dev/tree/1.24>.
+
 Add below line to `/etc/hosts` similar to:
 
 ```text
