@@ -15,6 +15,7 @@ import (
 	"github.com/pgillich/opentracing-example/internal"
 	"github.com/pgillich/opentracing-example/internal/logger"
 	"github.com/pgillich/opentracing-example/internal/model"
+	"github.com/pgillich/opentracing-example/internal/tracing"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -39,8 +40,12 @@ type TestClient struct {
 	cancel context.CancelFunc
 }
 
+type runTestServerType func(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log logr.Logger) *TestServer
+
 func (s *E2ETestSuite) TestMoreBackendFromFrontend() {
 	log := logger.GetLogger(s.T().Name())
+	tracing.SetErrorHandlerLogger(&log)
+	var runTestServer runTestServerType = runTestServerCmd
 
 	beServer1 := runTestServer("backend", "backend-1", &internal.BackendConfig{}, []string{"PONG_1"}, internal.NewBackendService, log)
 	defer beServer1.cancel()
@@ -71,6 +76,8 @@ func (s *E2ETestSuite) sendPingFrontend(feServer *TestServer, beServerAddrs []st
 
 func (s *E2ETestSuite) TestMoreBackendFromClient() {
 	log := logger.GetLogger(s.T().Name())
+	tracing.SetErrorHandlerLogger(&log)
+	var runTestServer runTestServerType = runTestServerCmd
 
 	beServer1 := runTestServer("backend", "backend-1", &internal.BackendConfig{}, []string{"PONG_1"}, internal.NewBackendService, log)
 	defer beServer1.cancel()
@@ -84,7 +91,8 @@ func (s *E2ETestSuite) TestMoreBackendFromClient() {
 	time.Sleep(1 * time.Second)
 }
 
-func runTestServer(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log logr.Logger) *TestServer {
+//nolint:deadcode,unused // old test
+func runTestServerService(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log logr.Logger) *TestServer {
 	server := &TestServer{
 		testServer: httptest.NewUnstartedServer(nil),
 	}
@@ -103,6 +111,24 @@ func runTestServer(typeName string, instance string, config internal.ConfigSette
 		if err := newService(ctx, config, log).Run(args); err != nil {
 			log.Error(err, "RunService")
 		}
+	}()
+	<-started
+	//time.Sleep(1 * time.Second)
+
+	return server
+}
+
+func runTestServerCmd(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log logr.Logger) *TestServer {
+	server := &TestServer{
+		testServer: httptest.NewUnstartedServer(nil),
+	}
+	server.addr = server.testServer.Listener.Addr().String()
+	started := make(chan struct{})
+	runner := TestServerRunner(server.testServer, started)
+	server.ctx, server.cancel = context.WithCancel(context.Background())
+	command := append([]string{typeName, "--listenaddr", server.addr, "--instance", invalidDomainNameRe.ReplaceAllString(instance, "-"), "--jaegerURL", "http://localhost:14268/api/traces"}, args...)
+	go func() {
+		cmd.Execute(server.ctx, command, runner)
 	}()
 	<-started
 	//time.Sleep(1 * time.Second)

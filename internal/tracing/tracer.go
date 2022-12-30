@@ -39,6 +39,10 @@ var onceBodySetOtel = func() { //nolint:gochecknoglobals // local once
 	otel.SetLogger(*errorHandler.log)
 }
 
+func SetErrorHandlerLogger(log *logr.Logger) {
+	errorHandler.log = log
+}
+
 const (
 	StateKeyClientCommand = "client_command"
 	SpanKeyComponent      = "component"
