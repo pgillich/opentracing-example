@@ -1,11 +1,11 @@
 package logger
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
-	"emperror.dev/errors"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-logr/logr"
 )
@@ -32,7 +32,7 @@ func (e ChiLogrEntry) Write(status, bytes int, header http.Header, elapsed time.
 func (e *ChiLogrEntry) Panic(v interface{}, stack []byte) {
 	e.WithValues(
 		"panic", v,
-	).Error(errors.NewPlain("chi panic"), "PANIC")
+	).Error(errors.New("chi panic"), "PANIC")
 }
 
 func (l *ChiLogr) NewLogEntry(r *http.Request) middleware.LogEntry {

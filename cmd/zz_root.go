@@ -8,12 +8,12 @@ import (
 	"os"
 	"strings"
 
-	"emperror.dev/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
 	"github.com/pgillich/opentracing-example/internal/model"
+	"github.com/pgillich/opentracing-example/internal/util"
 )
 
 var cfgFile string //nolint:gochecknoglobals // cobra
@@ -93,5 +93,5 @@ func RunService(ctx context.Context, serviceType string, args []string, config i
 
 	log.WithValues("config", config, "type", serviceType).Info("Running...")
 
-	return errors.Wrap(newService(ctx, config, log).Run(args), "service run")
+	return util.ErrorfIf("service run: %w", newService(ctx, config, log).Run(args))
 }

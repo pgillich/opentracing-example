@@ -1,7 +1,8 @@
 package logger
 
 import (
-	"emperror.dev/errors"
+	"errors"
+
 	"github.com/bombsimon/logrusr/v3"
 	"github.com/go-logr/logr"
 	"github.com/sirupsen/logrus"
@@ -11,7 +12,7 @@ const (
 	KeyCmd = "command"
 )
 
-var ErrInvalidConfig = errors.NewPlain("invalid config")
+var ErrInvalidConfig = errors.New("invalid config")
 
 var loggers = map[string]logr.Logger{} // nolint:gochecknoglobals // simple logging
 

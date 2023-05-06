@@ -1,10 +1,11 @@
-# opentracing-example
+# nats-example
 
-OpenTracing example
+NATS example
 
 ## Introduction
 
-It's an example implementation for my article on <https://pgillich.medium.com/multi-hop-tracing-with-opentelemetry-in-golang-792df5feb37c>
+It's an example implementation for my article at ?
+It's based on <https://github.com/pgillich/opentracing-example>.
 
 ## Running
 
@@ -18,11 +19,12 @@ docker run -d --name jaeger -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 -e COLLECTOR_OTL
 
 ```sh
 git clone https://github.com/pgillich/opentracing-example.git
+git checkout nats
 ```
 
 ### Running in CLI
 
-Compiling the binary (Go 1.18):
+Compiling the binary (Go 1.20):
 
 ```sh
 go build

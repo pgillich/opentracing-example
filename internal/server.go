@@ -2,9 +2,9 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
-	"emperror.dev/errors"
 	"github.com/go-logr/logr"
 )
 
@@ -16,7 +16,7 @@ type ConfigSetter interface {
 	GetOptions() []string
 }
 
-var ErrInvalidServerRunner = errors.NewPlain("invalid server runner")
+var ErrInvalidServerRunner = errors.New("invalid server runner")
 
 func RunServer(h http.Handler, shutdown <-chan struct{}, addr string, log logr.Logger) {
 	server := &http.Server{ // nolint:gosec // not secure

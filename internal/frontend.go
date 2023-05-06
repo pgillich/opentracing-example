@@ -2,12 +2,13 @@ package internal
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 
-	"emperror.dev/errors"
 	"github.com/go-chi/chi/v5"
 	chi_middleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-logr/logr"
@@ -158,7 +159,7 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 		ctx, http.MethodGet, beURL, http.NoBody,
 	)
 	if err != nil {
-		return "", errors.Wrap(err, "unable to send request")
+		return "", fmt.Errorf("unable to send request: %w", err)
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(
 		http.DefaultTransport,
@@ -169,14 +170,14 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 	)}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", errors.Wrap(err, "unable to send request")
+		return "", fmt.Errorf("unable to send request: %w", err)
 	}
 	if resp.Body == nil {
 		return "", errors.New("empty body")
 	}
 	beBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.Wrap(err, "unable to read response")
+		return "", fmt.Errorf("unable to read response: %w", err)
 	}
 	resp.Body.Close() //nolint:errcheck,gosec // not important
 
