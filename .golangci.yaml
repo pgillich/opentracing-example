@@ -119,12 +119,12 @@ issues:
     - text: "if block ends with a return statement, so drop this else and outdent its block"
       linters:
         - "golint"
-    - text: "Use errors.As to check for specific errors"
-      linters:
-        - errorlint
     - text: "indent-error-flow: if block ends with a return statement, so drop this else and outdent its block"
       linters:
         - revive
     - text: "error returned from external package is unwrapped"
       linters:
         - wrapcheck
+    - text: "do not define dynamic errors, use wrapped static errors instead"
+      linters:
+        - goerr113

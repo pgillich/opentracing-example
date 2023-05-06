@@ -125,7 +125,7 @@ func (c *Client) run(ctx context.Context, httpClient *http.Client, reqBody strin
 		return err
 	}
 	if resp.Body != nil {
-		defer resp.Body.Close() //nolint:errcheck // not needed
+		defer resp.Body.Close() //nolint:errcheck,gosec // not needed
 	}
 	c.log.Info("Client resp", "body", string(body))
 

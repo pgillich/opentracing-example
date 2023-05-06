@@ -14,7 +14,7 @@ const (
 
 var ErrInvalidConfig = errors.New("invalid config")
 
-var loggers = map[string]logr.Logger{} // nolint:gochecknoglobals // simple logging
+var loggers = map[string]logr.Logger{} //nolint:gochecknoglobals // simple logging
 
 func GetLogger(app string) logr.Logger {
 	if logger, has := loggers[app]; has {

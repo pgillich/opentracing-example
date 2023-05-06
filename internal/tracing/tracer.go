@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-logr/logr"
@@ -24,23 +25,23 @@ import (
 )
 
 type ErrorHandler struct {
-	log *logr.Logger
+	log atomic.Pointer[logr.Logger]
 }
 
 func (e *ErrorHandler) Handle(err error) {
-	e.log.Error(err, "OTEL ERROR")
+	e.log.Load().Error(err, "OTEL ERROR")
 }
 
-var errorHandler = &ErrorHandler{}
-var onceSetOtel sync.Once      //nolint:gochecknoglobals // local once
-var onceBodySetOtel = func() { //nolint:gochecknoglobals // local once
+var errorHandler = &ErrorHandler{} //nolint:gochecknoglobals // not changed
+var onceSetOtel sync.Once          //nolint:gochecknoglobals // local once
+var onceBodySetOtel = func() {     //nolint:gochecknoglobals // local once
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	otel.SetErrorHandler(errorHandler)
-	otel.SetLogger(*errorHandler.log)
+	otel.SetLogger(*errorHandler.log.Load())
 }
 
 func SetErrorHandlerLogger(log *logr.Logger) {
-	errorHandler.log = log
+	errorHandler.log.Store(log)
 }
 
 const (
@@ -72,8 +73,8 @@ func InitTracer(exporter sdktrace.SpanExporter, sampler sdktrace.Sampler, servic
 	}
 	tp := sdktrace.NewTracerProvider(providerOptions...)
 
-	if errorHandler.log == nil {
-		errorHandler.log = &log
+	if errorHandler.log.Load() == nil {
+		errorHandler.log.Store(&log)
 	}
 	onceSetOtel.Do(onceBodySetOtel)
 

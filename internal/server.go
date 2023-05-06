@@ -19,7 +19,7 @@ type ConfigSetter interface {
 var ErrInvalidServerRunner = errors.New("invalid server runner")
 
 func RunServer(h http.Handler, shutdown <-chan struct{}, addr string, log logr.Logger) {
-	server := &http.Server{ // nolint:gosec // not secure
+	server := &http.Server{ //nolint:gosec // not secure
 		Handler: h,
 		Addr:    addr,
 	}

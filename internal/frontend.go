@@ -111,7 +111,7 @@ func (s *Frontend) Run(args []string) error {
 
 			return
 		}
-		defer r.Body.Close() //nolint:errcheck // not important
+		defer r.Body.Close() //nolint:errcheck,gosec // not important
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			s.writeErr(w, http.StatusInternalServerError, err)
