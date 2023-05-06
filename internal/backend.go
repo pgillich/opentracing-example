@@ -129,28 +129,3 @@ func (s *Backend) Run(args []string) error {
 
 	return nil
 }
-
-/*
-	// ECHO
-
-	e := echo.New()
-	e.Use(EchoLogr(s.log))
-	e.Use(echo_middleware.Recover())
-	e.GET("/ping", func(c echo.Context) error {
-		return c.String(http.StatusOK, s.config.Response) //nolint:wrapcheck // Echo
-	})
-	h = e
-*/
-
-/*
-	// GIN
-
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
-	router.Use(ginlogr.Ginlogr(s.log, time.RFC3339, false))
-	router.Use(ginlogr.RecoveryWithLogr(s.log, time.RFC3339, false, true))
-	router.GET("/ping", func(c *gin.Context) {
-		c.String(http.StatusOK, s.config.Response)
-	})
-	h = router.Handler()
-*/
