@@ -41,11 +41,13 @@ func (c *NatsReqRespClient) Request(ctx context.Context, req model.Request) (*mo
 	log := c.log.WithValues("Queue", req.Queue, "MsgID", req.MsgID, "Header", req.Header, "Payload", string(req.Payload))
 	header := nats.Header(req.Header)
 	header.Add(NatsHeaderMsgID, req.MsgID)
+
 	respMsg, err := c.conn.RequestMsgWithContext(ctx, &nats.Msg{
 		Subject: req.Queue,
 		Header:  header,
 		Data:    req.Payload,
 	})
+
 	if err != nil {
 		log.Error(err, "nats.Conn.Request")
 
@@ -65,7 +67,7 @@ func (c *NatsReqRespClient) Request(ctx context.Context, req model.Request) (*mo
 		Error:   errTxt,
 	}
 	if msgId != req.MsgID {
-		return resp, fmt.Errorf("not consistent MsgID: %s, %s", msgId, req.MsgID)
+		return resp, fmt.Errorf("inconsistent MsgID: %s, %s", msgId, req.MsgID)
 	}
 
 	return resp, nil

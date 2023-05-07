@@ -2,16 +2,19 @@ package htmlmsg
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
-	natsserver "github.com/nats-io/nats-server/v2/test"
+	nats_server "github.com/nats-io/nats-server/v2/server"
+	nats_test "github.com/nats-io/nats-server/v2/test"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pgillich/opentracing-example/internal/htmlmsg/model"
@@ -34,13 +37,17 @@ func (s *NatsTestSuite) SetupTest() {
 func (s *NatsTestSuite) TestRequest() {
 	ctx := context.Background()
 
-	o := natsserver.DefaultTestOptions
-	o.Port = -1
-	o.NoLog = false
-	o.Debug = true
-	o.Trace = true
-	o.TraceVerbose = true
-	natsSrv := natsserver.RunServer(&o)
+	o := nats_server.Options{
+		Host:                  "127.0.0.1",
+		Port:                  -1,
+		NoLog:                 false,
+		Debug:                 true,
+		Trace:                 true,
+		NoSigs:                true,
+		MaxControlLine:        4096,
+		DisableShortFirstPing: true,
+	}
+	natsSrv := NatsRunServerCallback(&o, nil)
 	defer natsSrv.Shutdown()
 
 	natsUrl := "nats://" + net.JoinHostPort(o.Host, strconv.Itoa(o.Port))
@@ -98,4 +105,32 @@ func (s *NatsTestSuite) runServer(natsUrl string) (*NatsReqRespServer, error) {
 	}
 
 	return NewNatsReqRespServer(natsUrl, "reqresp.*", msgToHttp, s.log)
+}
+
+func NatsRunServerCallback(opts *nats_server.Options, callback func(*nats_server.Server)) *nats_server.Server {
+	if opts == nil {
+		opts = &nats_test.DefaultTestOptions
+	}
+	s, err := nats_server.NewServer(opts)
+	if err != nil || s == nil {
+		panic(fmt.Sprintf("No NATS Server object returned: %v", err))
+	}
+
+	if !opts.NoLog {
+		s.ConfigureLogger()
+	}
+
+	if callback != nil {
+		callback(s)
+	}
+
+	// Run server in Go routine.
+	go s.Start()
+
+	// Wait for accept loop(s) to be started
+	if !s.ReadyForConnections(1 * time.Second) {
+		panic("Unable to start NATS Server in Go Routine")
+	}
+
+	return s
 }
