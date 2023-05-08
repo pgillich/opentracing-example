@@ -8,7 +8,6 @@ type MsgRequester interface {
 
 type Request struct {
 	Queue   string              `json:"queue"`
-	MsgID   string              `json:"msgId"`
 	Header  map[string][]string `json:"header"`
 	Payload []byte              `json:"payload"`
 }

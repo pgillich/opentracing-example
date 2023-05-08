@@ -2,7 +2,6 @@ package htmlmsg
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/pgillich/opentracing-example/internal/htmlmsg/model"
 )
 
-const NatsHeaderMsgID = "X-Nats-MsgID"
 const NatsHeaderStatus = "X-Nats-Status"
 const NatsHeaderError = "X-Nats-Error"
 
@@ -38,9 +36,8 @@ func NewNatsReqRespClient(natsUrl string, log logr.Logger) (*NatsReqRespClient, 
 }
 
 func (c *NatsReqRespClient) Request(ctx context.Context, req model.Request) (*model.Response, error) {
-	log := c.log.WithValues("Queue", req.Queue, "MsgID", req.MsgID, "Header", req.Header, "Payload", string(req.Payload))
+	log := c.log.WithValues("Queue", req.Queue, "Header", req.Header, "Payload", string(req.Payload))
 	header := nats.Header(req.Header)
-	header.Add(NatsHeaderMsgID, req.MsgID)
 
 	respMsg, err := c.conn.RequestMsgWithContext(ctx, &nats.Msg{
 		Subject: req.Queue,
@@ -54,8 +51,7 @@ func (c *NatsReqRespClient) Request(ctx context.Context, req model.Request) (*mo
 		return nil, err
 	}
 	log.WithValues("ReqMsg", respMsg).Info("nats.Conn.Request")
-	msgId := respMsg.Header.Get(NatsHeaderMsgID)
-	respMsg.Header.Del(NatsHeaderMsgID)
+
 	status, _ := strconv.Atoi(respMsg.Header.Get(NatsHeaderStatus)) //nolint:errcheck // demo
 	respMsg.Header.Del(NatsHeaderStatus)
 	errTxt := respMsg.Header.Get(NatsHeaderError)
@@ -65,9 +61,6 @@ func (c *NatsReqRespClient) Request(ctx context.Context, req model.Request) (*mo
 		Payload: respMsg.Data,
 		Status:  status,
 		Error:   errTxt,
-	}
-	if msgId != req.MsgID {
-		return resp, fmt.Errorf("inconsistent MsgID: %s, %s", msgId, req.MsgID)
 	}
 
 	return resp, nil
@@ -96,10 +89,8 @@ func NewNatsReqRespServer(natsUrl string, pattern string, msgReciever model.MsgR
 	sub, err := conn.Subscribe(pattern, func(msg *nats.Msg) {
 		var err error //nolint:govet // hide above err
 		ctx := context.Background()
-		msgID := msg.Header.Get(NatsHeaderMsgID)
 		resp, err := msgReciever.Receive(ctx, model.Request{
 			Queue:   msg.Subject,
-			MsgID:   msgID,
 			Header:  msg.Header,
 			Payload: msg.Data,
 		})
@@ -113,7 +104,6 @@ func NewNatsReqRespServer(natsUrl string, pattern string, msgReciever model.MsgR
 			resp.Status = http.StatusInternalServerError
 		}
 		header := nats.Header(resp.Header)
-		header.Add(NatsHeaderMsgID, msgID)
 		header.Add(NatsHeaderStatus, strconv.Itoa(resp.Status))
 		header.Add(NatsHeaderError, resp.Error)
 		if err = msg.RespondMsg(&nats.Msg{Header: header, Data: resp.Payload}); err != nil {

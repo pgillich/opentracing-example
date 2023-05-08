@@ -1,6 +1,7 @@
 package htmlmsg
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -12,12 +13,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
 	nats_server "github.com/nats-io/nats-server/v2/server"
 	nats_test "github.com/nats-io/nats-server/v2/test"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/pgillich/opentracing-example/internal/htmlmsg/model"
 	"github.com/pgillich/opentracing-example/internal/logger"
 )
 
@@ -34,7 +33,7 @@ func (s *NatsTestSuite) SetupTest() {
 	s.log = logger.GetLogger(s.T().Name())
 }
 
-func (s *NatsTestSuite) TestRequest() {
+func (s *NatsTestSuite) TestHttpRequest() {
 	ctx := context.Background()
 
 	o := nats_server.Options{
@@ -59,22 +58,35 @@ func (s *NatsTestSuite) TestRequest() {
 	reqClient, err := NewNatsReqRespClient(natsUrl, s.log)
 	s.NoError(err)
 
-	msgID := uuid.NewString()
-	header := http.Header{}
+	httpClient := http.Client{
+		Transport: &HttpToMsg{
+			DefaultTransport: http.DefaultTransport,
+			Client:           reqClient,
+		},
+	}
+
 	payload := []byte("PING")
-	req := model.Request{Queue: "reqresp.ping", MsgID: msgID, Header: header, Payload: payload}
-	resp, err := reqClient.Request(ctx, req)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "queue://reqresp.ping", io.NopCloser(bytes.NewReader(payload)))
+	s.NoError(err)
+	httpReq.Header.Add("TestClient", s.T().Name())
+	httpResp, err := httpClient.Do(httpReq)
 
 	s.NoError(err)
-	s.log.Info("test", "resp", resp)
+	s.log.Info("test", "httpResp", httpResp)
 	expHeader := http.Header{}
-	expHeader.Add("TestHeader", "T")
-	s.Equal(&model.Response{
-		Header:  expHeader,
-		Payload: []byte("PONG"),
-		Status:  http.StatusOK,
-		Error:   "",
-	}, resp)
+	expHeader.Add("RcvTestClient", s.T().Name())
+	expBody := []byte("PONG")
+	s.Equal(&http.Response{
+		Request:       httpReq,
+		Proto:         "HTTP/1.0",
+		ProtoMajor:    1,
+		Header:        expHeader,
+		Close:         true,
+		Body:          io.NopCloser(bytes.NewReader(expBody)),
+		ContentLength: int64(len(expBody)),
+		StatusCode:    http.StatusOK,
+		Status:        fmt.Sprintf("%d %s", http.StatusOK, http.StatusText(http.StatusOK)),
+	}, httpResp)
 
 	srv.Close()
 }
@@ -90,7 +102,7 @@ func (s *NatsTestSuite) bindRoutes() http.Handler {
 		defer req.Body.Close()
 		body, _ := io.ReadAll(req.Body)
 		s.log.WithValues("Header", req.Header, "Payload", string(body)).Info("Post /nats/reqresp.ping")
-		w.Header().Add("TestHeader", "T")
+		w.Header().Add("RcvTestClient", req.Header.Get("TestClient"))
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("PONG"))
 	})
@@ -107,6 +119,7 @@ func (s *NatsTestSuite) runServer(natsUrl string) (*NatsReqRespServer, error) {
 	return NewNatsReqRespServer(natsUrl, "reqresp.*", msgToHttp, s.log)
 }
 
+// NatsRunServerCallback is an adapted github.com/nats-io/nats-server/v2/test/test.go:RunServerCallback
 func NatsRunServerCallback(opts *nats_server.Options, callback func(*nats_server.Server)) *nats_server.Server {
 	if opts == nil {
 		opts = &nats_test.DefaultTestOptions
