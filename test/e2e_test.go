@@ -77,7 +77,7 @@ func (s *E2ETestSuite) TestMoreBackendFromFrontend() {
 		s.sendPingFrontend(feServer1, []string{beServer1.addr, beServer2.addr, beServer2.addr}, log)
 	*/
 
-	s.sendPingFrontend(feServer1, []string{"queue://demo/reqresp.ping"}, log)
+	s.sendPingFrontend(feServer1, []string{"queue://demo/reqresp.ping", "queue://demo/reqresp.ping", "queue://demo/reqresp.ping"}, log)
 
 	time.Sleep(1 * time.Second)
 }

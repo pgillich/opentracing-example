@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 
 	"net/http/httptest"
 
@@ -28,12 +29,16 @@ func (h *MsgToHttp) Receive(ctx context.Context, req model.Request) (*model.Resp
 		Host:   header.Get(model.QueueHeaderHost),
 		Path:   path,
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqUrl.String(), io.NopCloser(bytes.NewReader(req.Payload)))
+	httpReq, err := http.NewRequestWithContext(ctx, header.Get(model.QueueHeaderMethod), reqUrl.String(), io.NopCloser(bytes.NewReader(req.Payload)))
 	if err != nil {
 		return nil, err
 	}
 	httpReq.Header = req.Header
+
 	h.Handler.ServeHTTP(respRec, httpReq)
+
+	hostname, _ := os.Hostname() //nolint:errcheck // demo
+	respRec.Header().Add(model.QueueHeaderServer, hostname)
 
 	return &model.Response{
 		Header:  respRec.Header(),

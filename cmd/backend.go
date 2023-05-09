@@ -14,8 +14,7 @@ import (
 )
 
 var (
-	BackendViper   *viper.Viper //nolint:gochecknoglobals // demo
-	BackendNatsURL *string      //nolint:gochecknoglobals // demo
+	BackendViper *viper.Viper //nolint:gochecknoglobals // demo
 )
 
 // backendCmd represents the backend command
@@ -26,10 +25,8 @@ var backendCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SetContext(cmd.Parent().Context())
 		initConfigViper(BackendViper)
-		cfg := &internal.BackendConfig{
-			NatsURL: *BackendNatsURL,
-		}
-		err := RunService(cmd.Context(), cmd.Use, args, cfg, BackendViper, internal.NewBackendService)
+
+		err := RunService(cmd.Context(), cmd.Use, args, &internal.BackendConfig{}, BackendViper, internal.NewBackendService)
 		time.Sleep(time.Second)
 
 		return err
@@ -41,7 +38,7 @@ func init() {
 	backendCmd.Flags().String("listenaddr", "localhost:8881", "Listen address")
 	backendCmd.Flags().String("instance", "#2", "Backend instance")
 	backendCmd.Flags().String("jaegerURL", "http://localhost:14268/api/traces", "Jaeger collector URL")
-	BackendNatsURL = backendCmd.Flags().String("natsURL", "", "NATS URL")
+	backendCmd.Flags().String("natsURL", "", "NATS URL")
 	backendCmd.Flags().String("response", "Hello", "Response text")
 	BackendViper = viper.New()
 

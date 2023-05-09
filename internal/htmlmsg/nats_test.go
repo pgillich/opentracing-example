@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"testing"
 
@@ -73,6 +74,8 @@ func (s *NatsTestSuite) TestHttpRequest() {
 	s.log.Info("test", "httpResp", httpResp)
 	expHeader := http.Header{}
 	expHeader.Add("RcvTestClient", s.T().Name())
+	hostname, _ := os.Hostname() //nolint:errcheck // demo
+	expHeader.Add("X-Queue-Server", hostname)
 	expBody := []byte("PONG")
 	s.Equal(&http.Response{
 		Request:       httpReq,
@@ -114,5 +117,5 @@ func (s *NatsTestSuite) runServer(natsURL string) (*NatsReqRespServer, error) {
 		PathPrefix: "nats",
 	}
 
-	return NewNatsReqRespServer(natsURL, "reqresp.*", msgToHttp, s.log)
+	return NewNatsReqRespServer(natsURL, "queGroup", "reqresp.*", msgToHttp, s.log)
 }

@@ -14,8 +14,7 @@ import (
 )
 
 var (
-	FrontendViper   *viper.Viper //nolint:gochecknoglobals // demo
-	FrontendNatsURL *string      //nolint:gochecknoglobals // demo
+	FrontendViper *viper.Viper //nolint:gochecknoglobals // demo
 )
 
 // frontendCmd represents the frontend command
@@ -26,10 +25,8 @@ var frontendCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SetContext(cmd.Parent().Context())
 		initConfigViper(FrontendViper)
-		cfg := &internal.FrontendConfig{
-			NatsURL: *FrontendNatsURL,
-		}
-		err := RunService(cmd.Context(), cmd.Use, args, cfg, FrontendViper, internal.NewFrontendService)
+
+		err := RunService(cmd.Context(), cmd.Use, args, &internal.FrontendConfig{}, FrontendViper, internal.NewFrontendService)
 		time.Sleep(time.Second)
 
 		return err
@@ -41,7 +38,7 @@ func init() {
 	frontendCmd.Flags().String("listenaddr", "localhost:8882", "Listen address")
 	frontendCmd.Flags().String("instance", "#0", "Frontend instance")
 	frontendCmd.Flags().String("jaegerURL", "http://localhost:14268/api/traces", "Jaeger collector URL")
-	FrontendNatsURL = frontendCmd.Flags().String("natsURL", "", "NATS URL")
+	frontendCmd.Flags().String("natsURL", "", "NATS URL")
 	FrontendViper = viper.New()
 	if err := FrontendViper.BindPFlags(frontendCmd.Flags()); err != nil {
 		logger.GetLogger(frontendCmd.Use).Error(err, "Unable to bind flags")

@@ -195,5 +195,7 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 	}
 	resp.Body.Close() //nolint:errcheck,gosec // not important
 
+	s.log.WithValues("Header", resp.Header, "Body", string(beBody), "StatusCode", resp.StatusCode, "Status", resp.Status).Info("sendToBackend RESPONSE")
+
 	return string(beBody), nil
 }

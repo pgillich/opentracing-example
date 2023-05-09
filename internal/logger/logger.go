@@ -21,7 +21,7 @@ func GetLogger(app string) logr.Logger {
 		return logger
 	}
 	lr := logrus.New()
-	lr.SetFormatter(&logrus.TextFormatter{ForceColors: false, DisableColors: false})
+	lr.SetFormatter(&logrus.TextFormatter{ForceColors: true, DisableColors: false})
 	lr.Level = logrus.TraceLevel
 	loggers[app] = logrusr.New(lr).WithName(app)
 

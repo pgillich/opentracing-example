@@ -125,7 +125,7 @@ func (s *Backend) Run(args []string) error {
 		Handler:    h,
 		PathPrefix: "nats",
 	}
-	_, err = htmlmsg.NewNatsReqRespServer(s.config.NatsURL, "reqresp.*", msgToHttp, s.log)
+	_, err = htmlmsg.NewNatsReqRespServer(s.config.NatsURL, "backend", "reqresp.*", msgToHttp, s.log)
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,6 @@ func (s *Backend) Run(args []string) error {
 
 func (s *Backend) handlePing(w http.ResponseWriter, r *http.Request, tp *sdktrace.TracerProvider) {
 	ctx := r.Context()
-	hostname, _ := os.Hostname() //nolint:errcheck // demo
 	span := trace.SpanFromContext(ctx)
 	defer func() {
 		spanText, _ := span.SpanContext().MarshalJSON() //nolint:errcheck // demo
@@ -152,7 +151,9 @@ func (s *Backend) handlePing(w http.ResponseWriter, r *http.Request, tp *sdktrac
 		tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
 	}()
 
-	if _, err := w.Write([]byte(s.config.Response + hostname)); err != nil {
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := w.Write([]byte(s.config.Response)); err != nil {
 		s.log.Error(err, "unable to send response")
 	}
 }
