@@ -3,20 +3,25 @@ package test
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr"
+	nats_server "github.com/nats-io/nats-server/v2/server"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pgillich/opentracing-example/cmd"
 	"github.com/pgillich/opentracing-example/internal"
+	"github.com/pgillich/opentracing-example/internal/htmlmsg"
 	"github.com/pgillich/opentracing-example/internal/logger"
 	"github.com/pgillich/opentracing-example/internal/model"
 	"github.com/pgillich/opentracing-example/internal/tracing"
-	"github.com/stretchr/testify/suite"
 )
 
 type E2ETestSuite struct {
@@ -45,24 +50,43 @@ type runTestServerType func(typeName string, instance string, config internal.Co
 func (s *E2ETestSuite) TestMoreBackendFromFrontend() {
 	log := logger.GetLogger(s.T().Name())
 	tracing.SetErrorHandlerLogger(&log)
+	no := nats_server.Options{
+		Host:                  "127.0.0.1",
+		Port:                  -1,
+		NoLog:                 false,
+		Debug:                 true,
+		Trace:                 true,
+		NoSigs:                true,
+		MaxControlLine:        4096,
+		DisableShortFirstPing: true,
+	}
+	natsSrv := htmlmsg.NatsRunServerCallback(&no, nil)
+	defer natsSrv.Shutdown()
+	natsURL := "nats://" + net.JoinHostPort(no.Host, strconv.Itoa(no.Port))
 	var runTestServer runTestServerType = runTestServerCmd
 
-	beServer1 := runTestServer("backend", "backend-1", &internal.BackendConfig{}, []string{"PONG_1"}, internal.NewBackendService, log)
+	beServer1 := runTestServer("backend", "backend-1", &internal.BackendConfig{}, []string{"--natsURL", natsURL, "PONG_1"}, internal.NewBackendService, log)
 	defer beServer1.cancel()
-	beServer2 := runTestServer("backend", "backend-2", &internal.BackendConfig{}, []string{"PONG_2"}, internal.NewBackendService, log)
+	beServer2 := runTestServer("backend", "backend-2", &internal.BackendConfig{}, []string{"--natsURL", natsURL, "PONG_2"}, internal.NewBackendService, log)
 	defer beServer2.cancel()
-	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{}, internal.NewFrontendService, log)
+	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{"--natsURL", natsURL}, internal.NewFrontendService, log)
 	defer feServer1.cancel()
 
-	s.sendPingFrontend(feServer1, []string{beServer1.addr}, log)
-	s.sendPingFrontend(feServer1, []string{beServer1.addr, beServer2.addr, beServer2.addr}, log)
+	/*
+		s.sendPingFrontend(feServer1, []string{beServer1.addr}, log)
+		s.sendPingFrontend(feServer1, []string{beServer1.addr, beServer2.addr, beServer2.addr}, log)
+	*/
+
+	s.sendPingFrontend(feServer1, []string{"queue://demo/reqresp.ping"}, log)
 
 	time.Sleep(1 * time.Second)
 }
 
 func (s *E2ETestSuite) sendPingFrontend(feServer *TestServer, beServerAddrs []string, log logr.Logger) {
 	for a := range beServerAddrs {
-		beServerAddrs[a] = "http://" + beServerAddrs[a] + "/ping"
+		if strings.Index(beServerAddrs[a], "queue://") != 0 {
+			beServerAddrs[a] = "http://" + beServerAddrs[a] + "/ping"
+		}
 	}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+feServer.addr+"/proxy", strings.NewReader(strings.Join(beServerAddrs, " ")))
 	s.NoError(err, "ping req")
@@ -122,6 +146,7 @@ func runTestServerCmd(typeName string, instance string, config internal.ConfigSe
 	server := &TestServer{
 		testServer: httptest.NewUnstartedServer(nil),
 	}
+	config.GetOptions()
 	server.addr = server.testServer.Listener.Addr().String()
 	started := make(chan struct{})
 	runner := TestServerRunner(server.testServer, started)

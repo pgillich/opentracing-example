@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/pgillich/opentracing-example/internal/htmlmsg/model"
 )
@@ -22,8 +23,10 @@ func (h *HttpToMsg) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Add(model.QueueHeaderHost, req.URL.Hostname())
+	queue := strings.TrimLeft(req.URL.Path, "/")
 	resp, err := h.Client.Request(req.Context(),
-		model.Request{Queue: req.URL.Hostname(), Header: req.Header, Payload: reqBody},
+		model.Request{Queue: queue, Header: req.Header, Payload: reqBody},
 	)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // demo

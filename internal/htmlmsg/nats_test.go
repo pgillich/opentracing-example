@@ -9,12 +9,10 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-logr/logr"
 	nats_server "github.com/nats-io/nats-server/v2/server"
-	nats_test "github.com/nats-io/nats-server/v2/test"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
@@ -49,13 +47,13 @@ func (s *NatsTestSuite) TestHttpRequest() {
 	natsSrv := NatsRunServerCallback(&o, nil)
 	defer natsSrv.Shutdown()
 
-	natsUrl := "nats://" + net.JoinHostPort(o.Host, strconv.Itoa(o.Port))
+	natsURL := "nats://" + net.JoinHostPort(o.Host, strconv.Itoa(o.Port))
 
-	srv, err := s.runServer(natsUrl)
+	srv, err := s.runServer(natsURL)
 	s.NoError(err)
 	s.NotNil(srv)
 
-	reqClient, err := NewNatsReqRespClient(natsUrl, s.log)
+	reqClient, err := NewNatsReqRespClient(natsURL, s.log)
 	s.NoError(err)
 
 	httpClient := http.Client{
@@ -66,7 +64,7 @@ func (s *NatsTestSuite) TestHttpRequest() {
 	}
 
 	payload := []byte("PING")
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "queue://reqresp.ping", io.NopCloser(bytes.NewReader(payload)))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "queue://demo/reqresp.ping", io.NopCloser(bytes.NewReader(payload)))
 	s.NoError(err)
 	httpReq.Header.Add("TestClient", s.T().Name())
 	httpResp, err := httpClient.Do(httpReq)
@@ -101,7 +99,7 @@ func (s *NatsTestSuite) bindRoutes() http.Handler {
 		}
 		defer req.Body.Close()
 		body, _ := io.ReadAll(req.Body)
-		s.log.WithValues("Header", req.Header, "Payload", string(body)).Info("Post /nats/reqresp.ping")
+		s.log.WithValues("URL", req.URL.String(), "Header", req.Header, "Payload", string(body)).Info("Post /nats/reqresp.ping")
 		w.Header().Add("RcvTestClient", req.Header.Get("TestClient"))
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("PONG"))
@@ -110,40 +108,11 @@ func (s *NatsTestSuite) bindRoutes() http.Handler {
 	return r
 }
 
-func (s *NatsTestSuite) runServer(natsUrl string) (*NatsReqRespServer, error) {
+func (s *NatsTestSuite) runServer(natsURL string) (*NatsReqRespServer, error) {
 	msgToHttp := &MsgToHttp{
 		Handler:    s.bindRoutes(),
 		PathPrefix: "nats",
 	}
 
-	return NewNatsReqRespServer(natsUrl, "reqresp.*", msgToHttp, s.log)
-}
-
-// NatsRunServerCallback is an adapted github.com/nats-io/nats-server/v2/test/test.go:RunServerCallback
-func NatsRunServerCallback(opts *nats_server.Options, callback func(*nats_server.Server)) *nats_server.Server {
-	if opts == nil {
-		opts = &nats_test.DefaultTestOptions
-	}
-	s, err := nats_server.NewServer(opts)
-	if err != nil || s == nil {
-		panic(fmt.Sprintf("No NATS Server object returned: %v", err))
-	}
-
-	if !opts.NoLog {
-		s.ConfigureLogger()
-	}
-
-	if callback != nil {
-		callback(s)
-	}
-
-	// Run server in Go routine.
-	go s.Start()
-
-	// Wait for accept loop(s) to be started
-	if !s.ReadyForConnections(1 * time.Second) {
-		panic("Unable to start NATS Server in Go Routine")
-	}
-
-	return s
+	return NewNatsReqRespServer(natsURL, "reqresp.*", msgToHttp, s.log)
 }

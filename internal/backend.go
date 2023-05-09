@@ -11,6 +11,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/pgillich/opentracing-example/internal/htmlmsg"
 	"github.com/pgillich/opentracing-example/internal/logger"
 	"github.com/pgillich/opentracing-example/internal/model"
 	"github.com/pgillich/opentracing-example/internal/tracing"
@@ -21,6 +22,7 @@ type BackendConfig struct {
 	Instance   string
 	Command    string
 	JaegerURL  string
+	NatsURL    string
 
 	Response string
 }
@@ -35,6 +37,10 @@ func (c *BackendConfig) SetInstance(instance string) {
 
 func (c *BackendConfig) SetJaegerURL(url string) {
 	c.JaegerURL = url
+}
+
+func (c *BackendConfig) SetNatsURL(url string) {
+	c.NatsURL = url
 }
 
 func (c *BackendConfig) SetCommand(command string) {
@@ -106,26 +112,47 @@ func (s *Backend) Run(args []string) error {
 	r.Use(tracing.ChiTracerMiddleware(tr, s.config.Instance, s.log))
 
 	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		span := trace.SpanFromContext(ctx)
-		defer func() {
-			spanText, _ := span.SpanContext().MarshalJSON() //nolint:errcheck // not important
-			s.log.WithValues(
-				"service", "backend",
-				"span", string(spanText),
-			).Info("Span END")
-			span.End()
-			tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
-		}()
-
-		if _, err := w.Write([]byte(s.config.Response + hostname)); err != nil {
-			s.log.Error(err, "unable to send response")
-		}
+		s.handlePing(w, r, tp)
+	})
+	r.Get("/nats/reqresp.ping", func(w http.ResponseWriter, r *http.Request) {
+		s.handlePing(w, r, tp)
 	})
 	h = r
+
+	// NATS
+
+	msgToHttp := &htmlmsg.MsgToHttp{
+		Handler:    h,
+		PathPrefix: "nats",
+	}
+	_, err = htmlmsg.NewNatsReqRespServer(s.config.NatsURL, "reqresp.*", msgToHttp, s.log)
+	if err != nil {
+		return err
+	}
+
+	// Server
 
 	s.serverRunner(h, s.shutdown, s.config.ListenAddr, s.log)
 	s.log.Info("Backend started")
 
 	return nil
+}
+
+func (s *Backend) handlePing(w http.ResponseWriter, r *http.Request, tp *sdktrace.TracerProvider) {
+	ctx := r.Context()
+	hostname, _ := os.Hostname() //nolint:errcheck // demo
+	span := trace.SpanFromContext(ctx)
+	defer func() {
+		spanText, _ := span.SpanContext().MarshalJSON() //nolint:errcheck // demo
+		s.log.WithValues(
+			"service", "backend",
+			"span", string(spanText),
+		).Info("Span END")
+		span.End()
+		tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
+	}()
+
+	if _, err := w.Write([]byte(s.config.Response + hostname)); err != nil {
+		s.log.Error(err, "unable to send response")
+	}
 }

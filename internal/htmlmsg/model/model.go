@@ -2,6 +2,8 @@ package model
 
 import "context"
 
+const QueueHeaderHost = "X-Queue-Host"
+
 type MsgRequester interface {
 	Request(ctx context.Context, req Request) (*Response, error)
 }

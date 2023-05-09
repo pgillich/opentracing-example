@@ -30,6 +30,8 @@ spec:
           value: "-"
         - name: JAEGERURL
           value: "http://jaeger-collector.istio-system.svc:14268/api/traces"
+        - name: NATSURL
+          value: "http://nats.istio-system.svc:4222/"
 ---
 apiVersion: v1
 kind: Service

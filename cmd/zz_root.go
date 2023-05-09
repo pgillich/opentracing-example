@@ -62,32 +62,36 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
+
+}
+
+func initConfigViper(v *viper.Viper) {
 	if cfgFile != "" {
 		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
+		v.SetConfigFile(cfgFile)
 	} else {
 		// Find home directory.
 		home, err := os.UserHomeDir()
 		cobra.CheckErr(err)
 
-		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".opentracing-example")
+		v.AddConfigPath(home)
+		v.SetConfigType("yaml")
+		v.SetConfigName(".opentracing-example")
 	}
 
-	viper.AutomaticEnv() // read in environment variables that match
+	v.AutomaticEnv() // read in environment variables that match
 
 	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		logger.GetLogger(rootCmd.Use).Info("Using config file", "path", viper.ConfigFileUsed())
+	if err := v.ReadInConfig(); err == nil {
+		logger.GetLogger(rootCmd.Use).Info("Using config file", "path", v.ConfigFileUsed())
 	}
 }
 
-func RunService(ctx context.Context, serviceType string, args []string, config interface{}, newService model.NewService) error {
+func RunService(ctx context.Context, serviceType string, args []string, config interface{}, v *viper.Viper, newService model.NewService) error {
 	commandLine := ctx.Value(model.CtxKeyCmd)
 	log := logger.GetLogger(serviceType).WithValues(logger.KeyCmd, commandLine)
 
-	if err := viper.Unmarshal(config); err != nil {
+	if err := v.Unmarshal(config); err != nil {
 		return err
 	}
 

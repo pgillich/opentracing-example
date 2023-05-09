@@ -12,14 +12,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	chi_middleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-logr/logr"
-	"github.com/pgillich/opentracing-example/internal/logger"
-	"github.com/pgillich/opentracing-example/internal/model"
-	"github.com/pgillich/opentracing-example/internal/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/pgillich/opentracing-example/internal/htmlmsg"
+	"github.com/pgillich/opentracing-example/internal/logger"
+	"github.com/pgillich/opentracing-example/internal/model"
+	"github.com/pgillich/opentracing-example/internal/tracing"
 )
 
 type FrontendConfig struct {
@@ -27,6 +29,7 @@ type FrontendConfig struct {
 	Instance   string
 	Command    string
 	JaegerURL  string
+	NatsURL    string
 }
 
 func (c *FrontendConfig) SetListenAddr(addr string) {
@@ -39,6 +42,10 @@ func (c *FrontendConfig) SetInstance(instance string) {
 
 func (c *FrontendConfig) SetJaegerURL(url string) {
 	c.JaegerURL = url
+}
+
+func (c *FrontendConfig) SetNatsURL(url string) {
+	c.NatsURL = url
 }
 
 func (c *FrontendConfig) SetCommand(command string) {
@@ -161,8 +168,15 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("unable to send request: %w", err)
 	}
+	natsClient, err := htmlmsg.NewNatsReqRespClient(s.config.NatsURL, s.log)
+	if err != nil {
+		return "", fmt.Errorf("unable to connect to nats: %w", err)
+	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(
-		http.DefaultTransport,
+		&htmlmsg.HttpToMsg{
+			DefaultTransport: http.DefaultTransport,
+			Client:           natsClient,
+		},
 		otelhttp.WithPropagators(otel.GetTextMapPropagator()),
 		otelhttp.WithSpanOptions(trace.WithAttributes(
 			attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),
