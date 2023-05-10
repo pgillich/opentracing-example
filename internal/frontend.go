@@ -182,6 +182,7 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 			attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),
 		)),
 	)}
+
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("unable to send request: %w", err)
