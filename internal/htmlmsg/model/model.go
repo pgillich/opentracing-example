@@ -7,8 +7,8 @@ const QueueHeaderMethod = "X-Queue-Method"
 const QueueHeaderServer = "X-Queue-Server"
 const QueueHeaderClient = "X-Queue-Client"
 
-type MsgRequester interface {
-	Request(ctx context.Context, req Request) (*Response, error)
+type MsgTransporter interface {
+	MsgReqResp(ctx context.Context, req Request) (*Response, error)
 }
 
 type Request struct {
@@ -24,6 +24,6 @@ type Response struct {
 	Error   string              `json:"error"`
 }
 
-type MsgReceiver interface {
-	Receive(ctx context.Context, req Request) (*Response, error)
+type MsgResponser interface {
+	MsgReqResp(ctx context.Context, req Request) (*Response, error)
 }

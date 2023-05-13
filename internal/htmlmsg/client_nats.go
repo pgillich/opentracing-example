@@ -10,7 +10,7 @@ import (
 	"github.com/pgillich/opentracing-example/internal/htmlmsg/model"
 )
 
-var _ model.MsgRequester = (*NatsReqRespClient)(nil)
+var _ model.MsgTransporter = (*NatsReqRespClient)(nil)
 
 type NatsReqRespClient struct {
 	url  string
@@ -31,7 +31,7 @@ func NewNatsReqRespClient(natsURL string, log logr.Logger) (*NatsReqRespClient, 
 	}, nil
 }
 
-func (c *NatsReqRespClient) Request(ctx context.Context, req model.Request) (*model.Response, error) {
+func (c *NatsReqRespClient) MsgReqResp(ctx context.Context, req model.Request) (*model.Response, error) {
 	log := c.log.WithValues("Queue", req.Queue, "Header", req.Header, "Payload", string(req.Payload))
 	header := nats.Header(req.Header)
 

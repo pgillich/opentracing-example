@@ -13,7 +13,7 @@ import (
 
 type HttpToMsg struct {
 	DefaultTransport http.RoundTripper
-	Client           model.MsgRequester // NatsReqRespClient
+	Client           model.MsgTransporter // NatsReqRespClient
 }
 
 func (h *HttpToMsg) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -29,7 +29,7 @@ func (h *HttpToMsg) RoundTrip(req *http.Request) (*http.Response, error) {
 	hostname, _ := os.Hostname() //nolint:errcheck // demo
 	req.Header.Add(model.QueueHeaderClient, hostname)
 	queue := strings.TrimLeft(req.URL.Path, "/")
-	resp, err := h.Client.Request(req.Context(),
+	resp, err := h.Client.MsgReqResp(req.Context(),
 		model.Request{Queue: queue, Header: req.Header, Payload: reqBody},
 	)
 	if err != nil {

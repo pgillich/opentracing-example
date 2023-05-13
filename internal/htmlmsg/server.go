@@ -13,14 +13,14 @@ import (
 	"github.com/pgillich/opentracing-example/internal/htmlmsg/model"
 )
 
-var _ model.MsgReceiver = (*MsgToHttp)(nil)
+var _ model.MsgTransporter = (*MsgToHttp)(nil)
 
 type MsgToHttp struct {
 	Handler    http.Handler
 	PathPrefix string
 }
 
-func (h *MsgToHttp) Receive(ctx context.Context, req model.Request) (*model.Response, error) {
+func (h *MsgToHttp) MsgReqResp(ctx context.Context, req model.Request) (*model.Response, error) {
 	respRec := &httptest.ResponseRecorder{Body: &bytes.Buffer{}}
 	header := http.Header(req.Header)
 	path, _ := url.JoinPath("/", h.PathPrefix, req.Queue) //nolint:errcheck // demo

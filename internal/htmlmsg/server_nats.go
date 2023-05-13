@@ -19,7 +19,7 @@ type NatsReqRespServer struct {
 	log     logr.Logger
 }
 
-func NewNatsReqRespServer(natsURL string, queGroup string, pattern string, msgReciever model.MsgReceiver, log logr.Logger) (*NatsReqRespServer, error) {
+func NewNatsReqRespServer(natsURL string, queGroup string, pattern string, msgResponser model.MsgTransporter, log logr.Logger) (*NatsReqRespServer, error) {
 	conn, err := nats.Connect(natsURL)
 	if err != nil {
 		return nil, err
@@ -30,7 +30,7 @@ func NewNatsReqRespServer(natsURL string, queGroup string, pattern string, msgRe
 		log.WithValues("ReqMsg", msg).Info("nats.Conn.Subscribe.CallBack")
 		var err error //nolint:govet // hide above err
 		ctx := context.Background()
-		resp, err := msgReciever.Receive(ctx, model.Request{
+		resp, err := msgResponser.MsgReqResp(ctx, model.Request{
 			Queue:   msg.Subject,
 			Header:  msg.Header,
 			Payload: msg.Data,

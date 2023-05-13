@@ -73,7 +73,6 @@ func (s *E2ETestSuite) TestMoreBackendFromFrontend() {
 	defer feServer1.cancel()
 
 	/*
-		s.sendPingFrontend(feServer1, []string{beServer1.addr}, log)
 		s.sendPingFrontend(feServer1, []string{beServer1.addr, beServer2.addr, beServer2.addr}, log)
 	*/
 
@@ -101,16 +100,29 @@ func (s *E2ETestSuite) sendPingFrontend(feServer *TestServer, beServerAddrs []st
 func (s *E2ETestSuite) TestMoreBackendFromClient() {
 	log := logger.GetLogger(s.T().Name())
 	tracing.SetErrorHandlerLogger(&log)
+	no := nats_server.Options{
+		Host:                  "127.0.0.1",
+		Port:                  -1,
+		NoLog:                 false,
+		Debug:                 true,
+		Trace:                 true,
+		NoSigs:                true,
+		MaxControlLine:        4096,
+		DisableShortFirstPing: true,
+	}
+	natsSrv := htmlmsg.NatsRunServerCallback(&no, nil)
+	defer natsSrv.Shutdown()
+	natsURL := "nats://" + net.JoinHostPort(no.Host, strconv.Itoa(no.Port))
 	var runTestServer runTestServerType = runTestServerCmd
 
-	beServer1 := runTestServer("backend", "backend-1", &internal.BackendConfig{}, []string{"PONG_1"}, internal.NewBackendService, log)
+	beServer1 := runTestServer("backend", "backend-1", &internal.BackendConfig{}, []string{"--natsURL", natsURL, "PONG_1"}, internal.NewBackendService, log)
 	defer beServer1.cancel()
-	beServer2 := runTestServer("backend", "backend-2", &internal.BackendConfig{}, []string{"PONG_2"}, internal.NewBackendService, log)
+	beServer2 := runTestServer("backend", "backend-2", &internal.BackendConfig{}, []string{"--natsURL", natsURL, "PONG_2"}, internal.NewBackendService, log)
 	defer beServer2.cancel()
-	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{}, internal.NewFrontendService, log)
+	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{"--natsURL", natsURL}, internal.NewFrontendService, log)
 	defer feServer1.cancel()
 
-	runTestClient("client", "client-1", feServer1.addr, "http://"+beServer1.addr+"/ping", "http://"+beServer2.addr+"/ping", "http://"+beServer2.addr+"/ping")
+	runTestClient("client", "client-1", feServer1.addr, "queue://demo/reqresp.ping", "queue://demo/reqresp.ping", "http://"+beServer2.addr+"/ping")
 
 	time.Sleep(1 * time.Second)
 }
