@@ -65,13 +65,15 @@ func (c *Client) Run(args []string) error {
 			c.log.Error(err, "Error shutting down tracer provider")
 		}
 	}()
-	httpClient := &http.Client{Transport: otelhttp.NewTransport(
-		http.DefaultTransport,
-		otelhttp.WithPropagators(otel.GetTextMapPropagator()),
-		otelhttp.WithSpanOptions(trace.WithAttributes(
-			attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),
-		)),
-	)}
+	httpClient := &http.Client{
+		Transport: otelhttp.NewTransport(
+			http.DefaultTransport,
+			otelhttp.WithPropagators(otel.GetTextMapPropagator()),
+			otelhttp.WithSpanOptions(trace.WithAttributes(
+				attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),
+			)),
+		),
+	}
 	tr := tp.Tracer("github.com/pgillich/opentracing-example/client", trace.WithInstrumentationVersion(tracing.SemVersion()))
 
 	ctx := context.Background()

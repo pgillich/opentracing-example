@@ -172,16 +172,18 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("unable to connect to nats: %w", err)
 	}
-	httpClient := &http.Client{Transport: otelhttp.NewTransport(
-		&htmlmsg.HttpToMsg{
-			DefaultTransport: http.DefaultTransport,
-			Client:           natsClient,
-		},
-		otelhttp.WithPropagators(otel.GetTextMapPropagator()),
-		otelhttp.WithSpanOptions(trace.WithAttributes(
-			attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),
-		)),
-	)}
+	httpClient := &http.Client{
+		Transport: otelhttp.NewTransport(
+			&htmlmsg.HttpToMsg{
+				DefaultTransport: http.DefaultTransport,
+				Client:           natsClient,
+			},
+			otelhttp.WithPropagators(otel.GetTextMapPropagator()),
+			otelhttp.WithSpanOptions(trace.WithAttributes(
+				attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),
+			)),
+		),
+	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
