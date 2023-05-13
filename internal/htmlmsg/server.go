@@ -20,7 +20,9 @@ type MsgToHttp struct {
 	PathPrefix string
 }
 
-func (h *MsgToHttp) MsgReqResp(ctx context.Context, req model.Request) (*model.Response, error) {
+func (h *MsgToHttp) MsgReqResp(ctx context.Context,
+	req model.Request,
+) (*model.Response, error) {
 	respRec := &httptest.ResponseRecorder{Body: &bytes.Buffer{}}
 	header := http.Header(req.Header)
 	path, _ := url.JoinPath("/", h.PathPrefix, req.Queue) //nolint:errcheck // demo
@@ -29,7 +31,11 @@ func (h *MsgToHttp) MsgReqResp(ctx context.Context, req model.Request) (*model.R
 		Host:   header.Get(model.QueueHeaderHost),
 		Path:   path,
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, header.Get(model.QueueHeaderMethod), reqUrl.String(), io.NopCloser(bytes.NewReader(req.Payload)))
+	httpReq, err := http.NewRequestWithContext(ctx,
+		header.Get(model.QueueHeaderMethod),
+		reqUrl.String(),
+		io.NopCloser(bytes.NewReader(req.Payload)),
+	)
 	if err != nil {
 		return nil, err
 	}

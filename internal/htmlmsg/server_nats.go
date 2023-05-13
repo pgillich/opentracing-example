@@ -19,14 +19,18 @@ type NatsReqRespServer struct {
 	log     logr.Logger
 }
 
-func NewNatsReqRespServer(natsURL string, queGroup string, pattern string, msgResponser model.MsgTransporter, log logr.Logger) (*NatsReqRespServer, error) {
+func NewNatsReqRespServer(
+	natsURL string, queGroup string, pattern string, msgResponser model.MsgTransporter, log logr.Logger,
+) (*NatsReqRespServer, error) {
 	conn, err := nats.Connect(natsURL)
 	if err != nil {
 		return nil, err
 	}
 
 	sub, err := conn.QueueSubscribe(pattern, queGroup, func(msg *nats.Msg) {
-		log = log.WithValues("Queue", msg.Subject, "Header", msg.Header, "Payload", string(msg.Data))
+		log = log.WithValues(
+			"Queue", msg.Subject, "Header", msg.Header, "Payload", string(msg.Data),
+		)
 		log.WithValues("ReqMsg", msg).Info("nats.Conn.Subscribe.CallBack")
 		var err error //nolint:govet // hide above err
 		ctx := context.Background()
@@ -47,7 +51,9 @@ func NewNatsReqRespServer(natsURL string, queGroup string, pattern string, msgRe
 		header := nats.Header(resp.Header)
 		header.Add(NatsHeaderStatus, strconv.Itoa(resp.Status))
 		header.Add(NatsHeaderError, resp.Error)
-		log.WithValues("RespHeader", header, "RespPayload", resp.Payload).Info("nats.Msg.RespondMsg")
+		log.WithValues(
+			"RespHeader", header, "RespPayload", resp.Payload,
+		).Info("nats.Msg.RespondMsg")
 		if err = msg.RespondMsg(&nats.Msg{Header: header, Data: resp.Payload}); err != nil {
 			log.Error(err, "nats.Msg.RespondMsg")
 		}

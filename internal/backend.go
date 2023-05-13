@@ -125,7 +125,9 @@ func (s *Backend) Run(args []string) error {
 		Handler:    h,
 		PathPrefix: "nats",
 	}
-	_, err = htmlmsg.NewNatsReqRespServer(s.config.NatsURL, "backend", "reqresp.*", msgToHttp, s.log)
+	_, err = htmlmsg.NewNatsReqRespServer(
+		s.config.NatsURL, "backend", "reqresp.*", msgToHttp, s.log,
+	)
 	if err != nil {
 		return err
 	}

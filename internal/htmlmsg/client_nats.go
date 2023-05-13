@@ -31,8 +31,12 @@ func NewNatsReqRespClient(natsURL string, log logr.Logger) (*NatsReqRespClient, 
 	}, nil
 }
 
-func (c *NatsReqRespClient) MsgReqResp(ctx context.Context, req model.Request) (*model.Response, error) {
-	log := c.log.WithValues("Queue", req.Queue, "Header", req.Header, "Payload", string(req.Payload))
+func (c *NatsReqRespClient) MsgReqResp(ctx context.Context,
+	req model.Request,
+) (*model.Response, error) {
+	log := c.log.WithValues(
+		"Queue", req.Queue, "Header", req.Header, "Payload", string(req.Payload),
+	)
 	header := nats.Header(req.Header)
 
 	respMsg, err := c.conn.RequestMsgWithContext(ctx, &nats.Msg{
