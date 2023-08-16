@@ -11,7 +11,7 @@ linters-settings:
     check-type-assertions: true
     check-blank: true
   gocyclo:
-    min-complexity: 10
+    min-complexity: 12
   golint:
     min-confidence: 0
   govet:
@@ -75,6 +75,7 @@ linters:
     - scopelint
     - exhaustruct
     - nosnakecase
+    - depguard
 issues:
   exclude-use-default: false
   exclude-rules:

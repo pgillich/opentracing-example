@@ -13,6 +13,7 @@ type ConfigSetter interface {
 	SetInstance(string)
 	SetCommand(string)
 	SetJaegerURL(string)
+	SetOtlpURL(string)
 	GetOptions() []string
 }
 

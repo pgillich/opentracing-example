@@ -75,7 +75,7 @@ func initConfig() {
 		viper.SetConfigName(".opentracing-example")
 	}
 
-	viper.AutomaticEnv() // read in environment variables that match
+	//viper.AutomaticEnv() // read in environment variables that match
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
@@ -83,11 +83,11 @@ func initConfig() {
 	}
 }
 
-func RunService(ctx context.Context, serviceType string, args []string, config interface{}, newService model.NewService) error {
+func RunService(ctx context.Context, serviceType string, args []string, configViper *viper.Viper, config interface{}, newService model.NewService) error {
 	commandLine := ctx.Value(model.CtxKeyCmd)
 	log := logger.GetLogger(serviceType).WithValues(logger.KeyCmd, commandLine)
 
-	if err := viper.Unmarshal(config); err != nil {
+	if err := configViper.Unmarshal(config); err != nil {
 		return err
 	}
 

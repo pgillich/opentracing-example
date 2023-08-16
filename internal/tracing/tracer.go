@@ -1,7 +1,9 @@
 package tracing
 
 import (
+	"context"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -14,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -154,14 +157,31 @@ func ChiTracerMiddleware(tr trace.Tracer, instance string, l logr.Logger) func(n
 	}
 }
 
-func JaegerProvider(url string) (sdktrace.SpanExporter, error) {
-	if url == "" || url == "-" {
+func JaegerProvider(jUrl string) (sdktrace.SpanExporter, error) {
+	if jUrl == "" || jUrl == "-" {
 		return nil, nil
 	}
 
 	return jaeger.New(jaeger.WithCollectorEndpoint(
-		jaeger.WithEndpoint(url),
+		jaeger.WithEndpoint(jUrl),
 	))
+}
+
+func OtlpProvider(oUrl string) (sdktrace.SpanExporter, error) {
+	if oUrl == "" || oUrl == "-" {
+		return nil, nil
+	}
+
+	otlpUrl, err := url.ParseRequestURI(oUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	return otlptracehttp.New(context.Background(), // otlptracehttp.client.Start does nothing in a HTTP client
+		otlptracehttp.WithInsecure(),
+		otlptracehttp.WithEndpoint(otlpUrl.Host),
+		otlptracehttp.WithURLPath(otlpUrl.Path),
+	)
 }
 
 func NewBaggage(instance, command string) (baggage.Baggage, error) {

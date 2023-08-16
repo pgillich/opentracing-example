@@ -1,6 +1,5 @@
 /*
 Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
@@ -14,6 +13,8 @@ import (
 	"github.com/pgillich/opentracing-example/internal/logger"
 )
 
+var frontendViper = viper.New() //nolint:gochecknoglobals // CMD
+
 // frontendCmd represents the frontend command
 var frontendCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 	Use:   "frontend",
@@ -22,7 +23,7 @@ var frontendCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SetContext(cmd.Parent().Context())
 
-		err := RunService(cmd.Context(), cmd.Use, args, &internal.FrontendConfig{}, internal.NewFrontendService)
+		err := RunService(cmd.Context(), cmd.Use, args, frontendViper, &internal.FrontendConfig{}, internal.NewFrontendService)
 		time.Sleep(time.Second)
 
 		return err
@@ -34,8 +35,10 @@ func init() {
 	frontendCmd.Flags().String("listenaddr", "localhost:8882", "Listen address")
 	frontendCmd.Flags().String("instance", "#0", "Frontend instance")
 	frontendCmd.Flags().String("jaegerURL", "http://localhost:14268/api/traces", "Jaeger collector address")
-	if err := viper.BindPFlags(frontendCmd.Flags()); err != nil {
+	frontendCmd.Flags().String("otlpURL", "http://localhost:4318", "OTLP collector address")
+	if err := frontendViper.BindPFlags(frontendCmd.Flags()); err != nil {
 		logger.GetLogger(frontendCmd.Use).Error(err, "Unable to bind flags")
 		panic(err)
 	}
+	frontendViper.AutomaticEnv()
 }

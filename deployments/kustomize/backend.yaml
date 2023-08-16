@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: pgillich/opentracing-example:v0.0.1
+        image: pgillich/opentracing-example:v0.0.1-4-gd99fd63
         imagePullPolicy: "IfNotPresent"
         command: ["/usr/local/bin/opentracing-example"]
         args: ["backend", "--response", "PONG_"]
@@ -29,7 +29,9 @@ spec:
         - name: INSTANCE
           value: "-"
         - name: JAEGERURL
-          value: "http://jaeger-collector.istio-system.svc:14268/api/traces"
+          value: "-"
+        - name: OTLPURL
+          value: "http://tempo.istio-system.svc:4318"
 ---
 apiVersion: v1
 kind: Service

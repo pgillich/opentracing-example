@@ -25,6 +25,7 @@ type ClientConfig struct {
 	Instance  string
 	Command   string
 	JaegerURL string
+	OtlpURL   string
 }
 
 type Client struct {
@@ -52,6 +53,12 @@ func (c *Client) Run(args []string) error {
 	traceExporter, err := tracing.JaegerProvider(c.config.JaegerURL)
 	if err != nil {
 		return err
+	}
+	if traceExporter == nil {
+		traceExporter, err = tracing.OtlpProvider(c.config.OtlpURL)
+		if err != nil {
+			return err
+		}
 	}
 	if c.config.Instance == "-" {
 		c.config.Instance, _ = os.Hostname() //nolint:errcheck // not important

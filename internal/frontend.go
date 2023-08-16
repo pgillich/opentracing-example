@@ -26,6 +26,7 @@ type FrontendConfig struct {
 	Instance   string
 	Command    string
 	JaegerURL  string
+	OtlpURL    string
 }
 
 func (c *FrontendConfig) SetListenAddr(addr string) {
@@ -38,6 +39,10 @@ func (c *FrontendConfig) SetInstance(instance string) {
 
 func (c *FrontendConfig) SetJaegerURL(url string) {
 	c.JaegerURL = url
+}
+
+func (c *FrontendConfig) SetOtlpURL(url string) {
+	c.OtlpURL = url
 }
 
 func (c *FrontendConfig) SetCommand(command string) {
@@ -83,6 +88,12 @@ func (s *Frontend) Run(args []string) error {
 	traceExporter, err := tracing.JaegerProvider(s.config.JaegerURL)
 	if err != nil {
 		return err
+	}
+	if traceExporter == nil {
+		traceExporter, err = tracing.OtlpProvider(s.config.OtlpURL)
+		if err != nil {
+			return err
+		}
 	}
 	tp := tracing.InitTracer(traceExporter, sdktrace.AlwaysSample(),
 		"frontend.opentracing-example", s.config.Instance, "", s.log,
@@ -160,6 +171,8 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 	if err != nil {
 		return "", errors.Wrap(err, "unable to send request")
 	}
+	//httpClient := &http.Client{}
+	// TODO
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(
 		http.DefaultTransport,
 		otelhttp.WithPropagators(otel.GetTextMapPropagator()),

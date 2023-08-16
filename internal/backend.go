@@ -21,6 +21,7 @@ type BackendConfig struct {
 	Instance   string
 	Command    string
 	JaegerURL  string
+	OtlpURL    string
 
 	Response string
 }
@@ -35,6 +36,10 @@ func (c *BackendConfig) SetInstance(instance string) {
 
 func (c *BackendConfig) SetJaegerURL(url string) {
 	c.JaegerURL = url
+}
+
+func (c *BackendConfig) SetOtlpURL(url string) {
+	c.OtlpURL = url
 }
 
 func (c *BackendConfig) SetCommand(command string) {
@@ -84,6 +89,12 @@ func (s *Backend) Run(args []string) error {
 	traceExporter, err := tracing.JaegerProvider(s.config.JaegerURL)
 	if err != nil {
 		return err
+	}
+	if traceExporter == nil {
+		traceExporter, err = tracing.OtlpProvider(s.config.OtlpURL)
+		if err != nil {
+			return err
+		}
 	}
 	tp := tracing.InitTracer(traceExporter, sdktrace.AlwaysSample(),
 		"backend.opentracing-example", s.config.Instance, "", s.log,
