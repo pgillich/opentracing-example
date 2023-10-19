@@ -154,13 +154,13 @@ func ChiTracerMiddleware(tr trace.Tracer, instance string, l logr.Logger) func(n
 	}
 }
 
-func JaegerProvider(url string) (sdktrace.SpanExporter, error) {
-	if url == "" || url == "-" {
+func JaegerProvider(jUrl string) (sdktrace.SpanExporter, error) {
+	if jUrl == "" || jUrl == "-" {
 		return nil, nil
 	}
 
 	return jaeger.New(jaeger.WithCollectorEndpoint(
-		jaeger.WithEndpoint(url),
+		jaeger.WithEndpoint(jUrl),
 	))
 }
 

@@ -8,7 +8,7 @@ It's an example implementation for my article on <https://pgillich.medium.com/mu
 
 ## Running
 
-## Starting Jaeger a server
+## Starting a Jaeger server
 
 ```sh
 docker run -d --name jaeger -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 -e COLLECTOR_OTLP_ENABLED=true -p 6831:6831/udp -p 6832:6832/udp -p 5778:5778 -p 16686:16686 -p 4317:4317 -p 4318:4318 -p 14250:14250 -p 14268:14268 -p 14269:14269 -p 9411:9411 jaegertracing/all-in-one:1.38
@@ -65,8 +65,14 @@ Add below line to `/etc/hosts` similar to:
 
 ```sh
 make build image
-kind load docker-image pgillich/opentracing-example:v0.0.1 --name demo
-sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
+make image-kind
+```
+
+Notice printed out image version (for example: `v0.0.1-4-gd99fd63`) and update image version in
+`deployments/kustomize/backend.yaml` and `deployments/kustomize/frontend.yaml`:
+
+```yaml
+        image: pgillich/opentracing-example:v0.0.1-4-gd99fd63
 ```
 
 Running servers:

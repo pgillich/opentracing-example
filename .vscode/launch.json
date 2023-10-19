@@ -18,6 +18,25 @@
             ]
         },
         {
+            "name": "Launch k8s client",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}",
+            "args": [
+                "client",
+                "http://backend:55501/ping",
+                "http://backend:55501/ping",
+                "http://backend:55501/ping"
+            ],
+            "env": {
+                "SERVER": "opentracing-example.kind-01.company.com",
+                "INSTANCE": "client-1",
+                "JAEGERURL": "-",
+                "OTLPURL": "http://tempo.kind-01.company.com"
+            }
+        },
+        {
             "name": "Launch backend",
             "type": "go",
             "request": "launch",

@@ -1,6 +1,5 @@
 /*
 Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
@@ -14,6 +13,8 @@ import (
 	"github.com/pgillich/opentracing-example/internal/logger"
 )
 
+var backendViper = viper.New() //nolint:gochecknoglobals // CMD
+
 // backendCmd represents the backend command
 var backendCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 	Use:   "backend",
@@ -22,7 +23,7 @@ var backendCmd = &cobra.Command{ //nolint:gochecknoglobals // cobra
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SetContext(cmd.Parent().Context())
 
-		err := RunService(cmd.Context(), cmd.Use, args, &internal.BackendConfig{}, internal.NewBackendService)
+		err := RunService(cmd.Context(), cmd.Use, args, backendViper, &internal.BackendConfig{}, internal.NewBackendService)
 		time.Sleep(time.Second)
 
 		return err
@@ -35,8 +36,9 @@ func init() {
 	backendCmd.Flags().String("instance", "#2", "Backend instance")
 	backendCmd.Flags().String("jaegerURL", "http://localhost:14268/api/traces", "Jaeger collector address")
 	backendCmd.Flags().String("response", "Hello", "Response text")
-	if err := viper.BindPFlags(backendCmd.Flags()); err != nil {
+	if err := backendViper.BindPFlags(backendCmd.Flags()); err != nil {
 		logger.GetLogger(backendCmd.Use).Error(err, "Unable to bind flags")
 		panic(err)
 	}
+	backendViper.AutomaticEnv()
 }

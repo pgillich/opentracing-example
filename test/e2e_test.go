@@ -19,6 +19,15 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+const (
+	jaegerUrlDefault = "http://localhost:14268/api/traces"
+)
+
+var (
+	// Optional configs
+	_ = jaegerUrlDefault
+)
+
 type E2ETestSuite struct {
 	suite.Suite
 }
@@ -102,7 +111,7 @@ func runTestServerService(typeName string, instance string, config internal.Conf
 	server.ctx, server.cancel = context.WithCancel(context.Background())
 	config.SetListenAddr(server.addr)
 	config.SetInstance(invalidDomainNameRe.ReplaceAllString(instance, "-"))
-	config.SetJaegerURL("http://localhost:14268/api/traces")
+	config.SetJaegerURL(jaegerUrlDefault)
 	command := strings.Join(append(append([]string{typeName}, config.GetOptions()...), args...), " ")
 	config.SetCommand(command)
 	ctx := context.WithValue(server.ctx, model.CtxKeyCmd, command)
@@ -126,7 +135,12 @@ func runTestServerCmd(typeName string, instance string, config internal.ConfigSe
 	started := make(chan struct{})
 	runner := TestServerRunner(server.testServer, started)
 	server.ctx, server.cancel = context.WithCancel(context.Background())
-	command := append([]string{typeName, "--listenaddr", server.addr, "--instance", invalidDomainNameRe.ReplaceAllString(instance, "-"), "--jaegerURL", "http://localhost:14268/api/traces"}, args...)
+	command := append([]string{
+		typeName,
+		"--listenaddr", server.addr,
+		"--instance", invalidDomainNameRe.ReplaceAllString(instance, "-"),
+		"--jaegerURL", jaegerUrlDefault,
+	}, args...)
 	go func() {
 		cmd.Execute(server.ctx, command, runner)
 	}()
@@ -143,7 +157,12 @@ func runTestClient(typeName string, instance string, addr string, args ...string
 		addr: addr,
 	}
 	server.ctx, server.cancel = context.WithCancel(context.Background())
-	cmd.Execute(server.ctx, append([]string{typeName, "--server", addr, "--instance", invalidDomainNameRe.ReplaceAllString(instance, "-")}, args...), nil)
+	cmd.Execute(server.ctx, append([]string{
+		typeName,
+		"--server", addr,
+		"--instance", invalidDomainNameRe.ReplaceAllString(instance, "-"),
+		"--jaegerURL", jaegerUrlDefault,
+	}, args...), nil)
 
 	return server
 }
