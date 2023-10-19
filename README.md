@@ -1,6 +1,6 @@
-# opentracing-example
+# middleware-example
 
-OpenTracing example
+Middleware example
 
 ## Introduction
 
@@ -18,11 +18,12 @@ docker run -d --name jaeger -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 -e COLLECTOR_OTL
 
 ```sh
 git clone https://github.com/pgillich/opentracing-example.git
+git checkout middleware
 ```
 
 ### Running in CLI
 
-Compiling the binary (Go 1.18):
+Compiling the binary (Go 1.20):
 
 ```sh
 go build

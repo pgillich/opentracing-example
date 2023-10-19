@@ -1,7 +1,7 @@
 SHELL=/bin/bash
 
-# Includes Go 1.18.4
-GOLANGCI_LINT_VERSION ?= v1.47.3
+# Includes Go 1.20.5
+GOLANGCI_LINT_VERSION ?=  v1.53.3
 DOCKER_BUILDER_IMAGE ?= golangci-lint:${GOLANGCI_LINT_VERSION}
 DOCKER_URL_PATH ?= golangci
 
