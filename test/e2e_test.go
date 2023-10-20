@@ -60,7 +60,7 @@ func (s *E2ETestSuite) TestMoreBackendFromFrontend() {
 	defer beServer1.cancel()
 	beServer2 := runTestServer("backend", "backend-2", &internal.BackendConfig{}, []string{"PONG_2"}, internal.NewBackendService, log)
 	defer beServer2.cancel()
-	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{}, internal.NewFrontendService, log)
+	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{"--maxReq", "1"}, internal.NewFrontendService, log)
 	defer feServer1.cancel()
 
 	s.sendPingFrontend(feServer1, []string{beServer1.addr}, log)

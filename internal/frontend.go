@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -11,14 +12,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	chi_middleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-logr/logr"
-	"github.com/pgillich/opentracing-example/internal/logger"
-	"github.com/pgillich/opentracing-example/internal/model"
-	"github.com/pgillich/opentracing-example/internal/tracing"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/semaphore"
+
+	"github.com/pgillich/opentracing-example/internal/logger"
+	"github.com/pgillich/opentracing-example/internal/middleware"
+	"github.com/pgillich/opentracing-example/internal/model"
+	"github.com/pgillich/opentracing-example/internal/tracing"
 )
 
 type FrontendConfig struct {
@@ -26,6 +31,7 @@ type FrontendConfig struct {
 	Instance   string
 	Command    string
 	JaegerURL  string
+	MaxReq     int64
 }
 
 func (c *FrontendConfig) SetListenAddr(addr string) {
@@ -104,6 +110,8 @@ func (s *Frontend) Run(args []string) error {
 	r.Use(chi_middleware.Recoverer)
 	r.Use(tracing.ChiTracerMiddleware(tr, s.config.Instance, s.log))
 
+	r.Handle("/metrics", promhttp.Handler())
+
 	r.Get("/proxy", func(w http.ResponseWriter, r *http.Request) {
 		if r.Body == nil {
 			s.writeErr(w, http.StatusInternalServerError, errors.New("empty response"))
@@ -111,7 +119,7 @@ func (s *Frontend) Run(args []string) error {
 			return
 		}
 		defer r.Body.Close() //nolint:errcheck // not important
-		body, err := io.ReadAll(r.Body)
+		inBody, err := io.ReadAll(r.Body)
 		if err != nil {
 			s.writeErr(w, http.StatusInternalServerError, err)
 
@@ -130,15 +138,56 @@ func (s *Frontend) Run(args []string) error {
 			tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
 		}()
 
-		bodies := []string{}
-		for _, beURL := range strings.Split(string(body), " ") {
-			body, err := s.sendToBackend(ctx, beURL) //nolint:govet // err shadow
-			if err != nil {
-				s.writeErr(w, http.StatusInternalServerError, err)
+		inBodies := strings.Split(string(inBody), " ")
 
-				return
+		bodies := []string{}
+		errs := []error{}
+		meter := middleware.GetMeter(s.log)
+		sem := semaphore.NewWeighted(s.config.MaxReq)
+		type bodyRespT struct {
+			Body string
+			Err  error
+		}
+		bodyRespCh := make(chan bodyRespT)
+		for be, beURL := range inBodies {
+			go func(be int, beURL string) {
+				bodyResp := bodyRespT{}
+				var retVal interface{}
+				retVal, bodyResp.Err = middleware.InternalMiddlewareChain(
+					middleware.TryCatch(),
+					middleware.SemAcquire(sem),
+					middleware.StartSpan(tr, fmt.Sprintf("GET %s %d", beURL, be)),
+					middleware.Metrics(meter, "example_job", "Example job", map[string]string{
+						"job_type": "example",
+						"job_name": fmt.Sprintf("GET %s", beURL),
+					}, middleware.FirstErr, s.log),
+					middleware.TryCatch(),
+				)(func(ctx context.Context) (interface{}, error) {
+					return s.sendToBackend(ctx, beURL)
+				})(ctx)
+				if retVal != nil {
+					var is bool
+					bodyResp.Body, is = retVal.(string)
+					if !is {
+						bodyResp.Err = fmt.Errorf("%w: %t", middleware.ErrTypeCast, retVal)
+					}
+				}
+
+				bodyRespCh <- bodyResp
+			}(be, beURL)
+		}
+		for range inBodies {
+			resp := <-bodyRespCh
+			if resp.Err != nil {
+				errs = append(errs, resp.Err)
+			} else {
+				bodies = append(bodies, resp.Body)
 			}
-			bodies = append(bodies, body)
+		}
+		if len(errs) > 0 {
+			s.writeErr(w, http.StatusInternalServerError, errors.Combine(errs...))
+
+			return
 		}
 
 		if _, err = w.Write([]byte(strings.Join(bodies, " "))); err != nil {

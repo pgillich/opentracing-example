@@ -35,6 +35,7 @@ func init() {
 	frontendCmd.Flags().String("listenaddr", "localhost:8882", "Listen address")
 	frontendCmd.Flags().String("instance", "#0", "Frontend instance")
 	frontendCmd.Flags().String("jaegerURL", "http://localhost:14268/api/traces", "Jaeger collector address")
+	frontendCmd.Flags().Int64("maxReq", 1, "Max number of outgoing parallel requests")
 	if err := frontendViper.BindPFlags(frontendCmd.Flags()); err != nil {
 		logger.GetLogger(frontendCmd.Use).Error(err, "Unable to bind flags")
 		panic(err)
