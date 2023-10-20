@@ -6,6 +6,21 @@ Middleware example
 
 It's an example implementation for my article on <https://pgillich.medium.com/multi-hop-tracing-with-opentelemetry-in-golang-792df5feb37c>
 
+Opentelemetry info:
+
+* <https://opentelemetry.io/docs/specs/otel/>
+* <https://opentelemetry.io/docs/instrumentation/go/>
+* <https://opentelemetry.io/docs/instrumentation/go/manual/>
+* <https://pkg.go.dev/go.opentelemetry.io/otel>
+* <https://pkg.go.dev/go.opentelemetry.io/otel/exporters>
+
+Logging info:
+
+* <https://go.dev/blog/slog>
+* <https://pkg.go.dev/log/slog>
+* <https://github.com/golang/go/issues/58243>
+* <https://betterstack.com/community/guides/logging/logging-in-go/>
+
 ## Running
 
 ## Starting a Jaeger server

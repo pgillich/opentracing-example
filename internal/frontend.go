@@ -112,7 +112,17 @@ func (s *Frontend) Run(args []string) error {
 
 	r.Handle("/metrics", promhttp.Handler())
 
-	r.Get("/proxy", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/proxy", s.proxyHandler(tp, tr))
+	h = r
+
+	s.serverRunner(h, s.shutdown, s.config.ListenAddr, s.log)
+	s.log.Info("Frontend exit")
+
+	return nil
+}
+
+func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Body == nil {
 			s.writeErr(w, http.StatusInternalServerError, errors.New("empty response"))
 
@@ -193,13 +203,7 @@ func (s *Frontend) Run(args []string) error {
 		if _, err = w.Write([]byte(strings.Join(bodies, " "))); err != nil {
 			s.log.Error(err, "unable to write response")
 		}
-	})
-	h = r
-
-	s.serverRunner(h, s.shutdown, s.config.ListenAddr, s.log)
-	s.log.Info("Frontend exit")
-
-	return nil
+	}
 }
 
 func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, error) {
@@ -231,94 +235,3 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 
 	return string(beBody), nil
 }
-
-/*
-		// ECHO
-
-	e := echo.New()
-	e.Use(logger.EchoLogr(s.log))
-	e.Use(echo_middleware.Recover())
-	e.GET("/proxy", func(c echo.Context) error {
-		if c.Request().Body == nil {
-			return c.String(http.StatusInternalServerError, "empty response") //nolint:wrapcheck // Echo
-		}
-		defer c.Request().Body.Close() //nolint:errcheck // not important
-		body, err := io.ReadAll(c.Request().Body)
-		if err != nil {
-			return c.String(http.StatusInternalServerError, err.Error()) //nolint:wrapcheck // Echo
-		}
-		bodies := []string{}
-		for _, beURL := range strings.Split(string(body), " ") {
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, beURL, http.NoBody)
-			if err != nil {
-				return c.String(http.StatusInternalServerError, err.Error()) //nolint:wrapcheck // Echo
-			}
-			httpClient := &http.Client{}
-			resp, err := httpClient.Do(req)
-			if err != nil {
-				return c.String(http.StatusInternalServerError, err.Error()) //nolint:wrapcheck // Echo
-			}
-			if resp.Body == nil {
-				return c.String(http.StatusInternalServerError, "empty response") //nolint:wrapcheck // Echo
-			}
-			beBody, err := io.ReadAll(resp.Body)
-			resp.Body.Close() //nolint:errcheck,gosec // not important
-			if err != nil {
-				return c.String(http.StatusInternalServerError, err.Error()) //nolint:wrapcheck // Echo
-			}
-			bodies = append(bodies, string(beBody))
-		}
-
-		return c.String(http.StatusOK, strings.Join(bodies, " ")) //nolint:wrapcheck // Echo
-	})
-	h = e
-*/
-
-/*
-	// GIN
-
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
-	router.Use(ginlogr.Ginlogr(s.log, time.RFC3339, false))
-	router.Use(ginlogr.RecoveryWithLogr(s.log, time.RFC3339, false, true))
-	router.GET("/proxy", func(c *gin.Context) {
-		if c.Request.Body == nil {
-			c.String(http.StatusInternalServerError, "empty response")
-			return //nolint:nlreturn // no problem
-		}
-		defer c.Request.Body.Close() //nolint:errcheck // not important
-		body, err := io.ReadAll(c.Request.Body)
-		if err != nil {
-			c.String(http.StatusInternalServerError, err.Error())
-			return //nolint:nlreturn // no problem
-		}
-		bodies := []string{}
-		for _, beURL := range strings.Split(string(body), " ") {
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, beURL, http.NoBody)
-			if err != nil {
-				c.String(http.StatusInternalServerError, err.Error())
-				return //nolint:nlreturn // no problem
-			}
-			httpClient := &http.Client{}
-			resp, err := httpClient.Do(req)
-			if err != nil {
-				c.String(http.StatusInternalServerError, err.Error())
-				return //nolint:nlreturn // no problem
-			}
-			if resp.Body == nil {
-				c.String(http.StatusInternalServerError, "empty response")
-				return //nolint:nlreturn // no problem
-			}
-			beBody, err := io.ReadAll(resp.Body)
-			resp.Body.Close() //nolint:errcheck,gosec // not important
-			if err != nil {
-				c.String(http.StatusInternalServerError, err.Error())
-				return //nolint:nlreturn // no problem
-			}
-			bodies = append(bodies, string(beBody))
-		}
-
-		c.String(http.StatusOK, strings.Join(bodies, " "))
-	})
-	h = router.Handler()
-*/

@@ -1,3 +1,4 @@
+// Goroutine middlewares
 package middleware
 
 import (
@@ -19,13 +20,16 @@ import (
 )
 
 const (
-	AttrErr = "error"
+	// MetrAttrErr is the metric attribute for error
+	MetrAttrErr = "error"
 )
 
 var (
-	ErrTypeCast = errors.NewPlain("unable to cast to type")
+	// ErrTypeCast is an error for type assertion from interface
+	ErrTypeCast = errors.NewPlain("unable to cast interface to type")
 )
 
+// SemAcquire is a middleware to acquire semaphore
 func SemAcquire(sem *semaphore.Weighted) InternalMiddleware {
 	return func(next InternalMiddlewareFn) InternalMiddlewareFn {
 		return func(ctx context.Context) (interface{}, error) {
@@ -47,6 +51,7 @@ func SemAcquire(sem *semaphore.Weighted) InternalMiddleware {
 	}
 }
 
+// StartSpan is a middleware to start/end a new span, using from context
 func StartSpan(tr trace.Tracer, spanName string) InternalMiddleware {
 	return func(next InternalMiddlewareFn) InternalMiddlewareFn {
 		return func(ctx context.Context) (interface{}, error) {
@@ -62,6 +67,7 @@ func StartSpan(tr trace.Tracer, spanName string) InternalMiddleware {
 	}
 }
 
+// TryCatch is a middleware for catching Go panic and propagating it as an error
 func TryCatch() InternalMiddleware {
 	return func(next InternalMiddlewareFn) InternalMiddlewareFn {
 		return func(ctx context.Context) (interface{}, error) {
@@ -78,8 +84,10 @@ func TryCatch() InternalMiddleware {
 	}
 }
 
+// ErrPanic is an error for captured panic
 var ErrPanic = errors.NewPlain("captured panic")
 
+// tryCatch captures a Go panic and returns as an error
 func tryCatch(f func()) func() error {
 	return func() (err error) {
 		defer func() {
@@ -89,12 +97,23 @@ func tryCatch(f func()) func() error {
 				return
 			}
 		}()
+
 		f() // calling the decorated function
 
 		return err
 	}
 }
 
+/*
+Metrics is a middleware to make count and duration report
+
+	Prometheus-specific implementation:
+	The "_total" suffix is appended to the counter name, defined in "counterSuffix", see:
+	https://github.com/open-telemetry/opentelemetry-go/blob/main/exporters/prometheus/exporter.go#L100
+	The unit "s" is appended as "_seconds" to the metric name (injected before the "_total" suffix),
+	defined in "unitSuffixes", see
+	https://github.com/open-telemetry/opentelemetry-go/blob/main/exporters/prometheus/exporter.go#L343
+*/
 func Metrics(meter metric_api.Meter, name string, description string, attributes map[string]string,
 	errFormatter ErrFormatter, log logr.Logger,
 ) InternalMiddleware {
@@ -125,7 +144,7 @@ func Metrics(meter metric_api.Meter, name string, description string, attributes
 			elapsedSec := time.Since(beginTS).Seconds()
 			attrs := make([]attribute.KeyValue, len(baseAttrs), len(baseAttrs)+1)
 			copy(attrs, baseAttrs)
-			opt := metric_api.WithAttributes(append(attrs, attribute.Key(AttrErr).String(errFormatter(err)))...)
+			opt := metric_api.WithAttributes(append(attrs, attribute.Key(MetrAttrErr).String(errFormatter(err)))...)
 			attempted.Add(ctx, 1, opt)
 			durationSum.Add(ctx, elapsedSec, opt)
 
@@ -134,9 +153,8 @@ func Metrics(meter metric_api.Meter, name string, description string, attributes
 	}
 }
 
-/*
-	InstrumentReg stores the already registered instruments
-*/
+// InstrumentReg stores the already registered instruments
+//
 //nolint:structcheck // generics
 type InstrumentReg[T any, O any] struct {
 	instruments   map[string]T
@@ -144,6 +162,7 @@ type InstrumentReg[T any, O any] struct {
 	newInstrument func(name string, options ...O) (T, error)
 }
 
+// GetInstrument registers a new instrument, otherwise returns the already created.
 func (r *InstrumentReg[T, O]) GetInstrument(name string, options ...O) (T, error) {
 	var err error
 	r.mu.Lock()
@@ -161,13 +180,18 @@ func (r *InstrumentReg[T, O]) GetInstrument(name string, options ...O) (T, error
 }
 
 var (
-	meter     metric_api.Meter //nolint:gochecknoglobals // private
-	meterOnce sync.Once        //nolint:gochecknoglobals // private
-
-	regInt64Counter   *InstrumentReg[metric_api.Int64Counter, metric_api.Int64CounterOption]     //nolint:gochecknoglobals // private
+	// meter is the default meter
+	meter metric_api.Meter //nolint:gochecknoglobals // private
+	// meterOnce is used to init meter
+	meterOnce sync.Once //nolint:gochecknoglobals // private
+	// regInt64Counter stores Int64Counters
+	regInt64Counter *InstrumentReg[metric_api.Int64Counter, metric_api.Int64CounterOption] //nolint:gochecknoglobals // private
+	// regFloat64Counter stores Float64Counters
 	regFloat64Counter *InstrumentReg[metric_api.Float64Counter, metric_api.Float64CounterOption] //nolint:gochecknoglobals // private
 )
 
+// GetMeter returns the default meter
+// Inits meter and InstrumentRegs (if needed)
 func GetMeter(log logr.Logger) metric_api.Meter {
 	meterOnce.Do(func() {
 		exporter, err := prometheus.New()
@@ -191,12 +215,16 @@ func GetMeter(log logr.Logger) metric_api.Meter {
 	return meter
 }
 
+// ErrFormatter is a func type to format metric error attribute
 type ErrFormatter func(error) string
 
+// NoErr always returns "". Can be used to skip any error stats in the metrics
 func NoErr(error) string {
 	return ""
 }
 
+// FullErr returns the full error text.
+// Be careful about the cardinality, if the error text has dynamic part(s) (see: Prometheus label)
 func FullErr(err error) string {
 	if err == nil {
 		return ""
@@ -205,6 +233,7 @@ func FullErr(err error) string {
 	return err.Error()
 }
 
+// FirstErr returns the first part of error text before ':'
 func FirstErr(err error) string {
 	if err == nil {
 		return ""
