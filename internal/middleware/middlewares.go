@@ -51,14 +51,20 @@ func SemAcquire(sem *semaphore.Weighted) InternalMiddleware {
 	}
 }
 
-// StartSpan is a middleware to start/end a new span, using from context
-func StartSpan(tr trace.Tracer, spanName string) InternalMiddleware {
+// Span is a middleware to start/end a new span, using from context.
+// Sets "traceID", "spanParentID" and "spanID" log values.
+func Span(tr trace.Tracer, spanName string) InternalMiddleware {
 	return func(next InternalMiddlewareFn) InternalMiddlewareFn {
 		return func(ctx context.Context) (interface{}, error) {
-			trace.SpanFromContext(ctx).SpanContext()
+			spanParent := trace.SpanFromContext(ctx).SpanContext()
 			ctx, spanChild := tr.Start(ctx, spanName,
 				trace.WithSpanKind(trace.SpanKindInternal),
 			)
+			ctx = logr.NewContext(ctx, logr.FromContextOrDiscard(ctx).WithValues(
+				"traceID", spanParent.TraceID().String(),
+				"spanParentID", spanParent.SpanID().String(),
+				"spanID", spanChild.SpanContext().SpanID().String(),
+			))
 
 			defer spanChild.End()
 
@@ -104,6 +110,32 @@ func tryCatch(f func()) func() error {
 	}
 }
 
+// Logger is a middleware for logging begin and end messages.
+// A new logger with values is added to the context.
+func Logger(values map[string]string, beginLevel int, endLevel int) InternalMiddleware {
+	logValues := make([]any, 0, len(values)*2)
+	for k, v := range values {
+		logValues = append(logValues, k, v)
+	}
+
+	return func(next InternalMiddlewareFn) InternalMiddlewareFn {
+		return func(ctx context.Context) (interface{}, error) {
+			log := logr.FromContextOrDiscard(ctx)
+			log = log.WithValues(logValues...)
+			ctx = logr.NewContext(ctx, log)
+			log.V(beginLevel).Info("GO_BEGIN")
+			beginTS := time.Now()
+
+			retVal, err := next(ctx)
+
+			elapsedSec := time.Since(beginTS).Seconds()
+			log.WithValues("duration", fmt.Sprintf("%.3f", elapsedSec)).V(endLevel).Info("GO_END")
+
+			return retVal, err
+		}
+	}
+}
+
 /*
 Metrics is a middleware to make count and duration report
 
@@ -114,9 +146,10 @@ Metrics is a middleware to make count and duration report
 	defined in "unitSuffixes", see
 	https://github.com/open-telemetry/opentelemetry-go/blob/main/exporters/prometheus/exporter.go#L343
 */
-func Metrics(meter metric_api.Meter, name string, description string, attributes map[string]string,
-	errFormatter ErrFormatter, log logr.Logger,
+func Metrics(ctx context.Context, meter metric_api.Meter, name string,
+	description string, attributes map[string]string, errFormatter ErrFormatter,
 ) InternalMiddleware {
+	log := logr.FromContextOrDiscard(ctx)
 	baseAttrs := make([]attribute.KeyValue, 0, len(attributes))
 	for aKey, aVal := range attributes {
 		baseAttrs = append(baseAttrs, attribute.Key(aKey).String(aVal))
@@ -126,10 +159,7 @@ func Metrics(meter metric_api.Meter, name string, description string, attributes
 		log.Error(err, "unable to instantiate counter", "metricName", name)
 		panic(err)
 	}
-	// Prometheus-specific implementation:
-	// the unit "s" is appended as "_seconds" to the name (before the _total suffix), defined in unitSuffixes,
-	// https://github.com/open-telemetry/opentelemetry-go/blob/main/exporters/prometheus/exporter.go#L343
-	durationSum, err := regFloat64Counter.GetInstrument(name, metric_api.WithDescription(description+", duration sum"), metric_api.WithUnit("s"))
+	durationSum, err := regFloat64Counter.GetInstrument(name+"_duration", metric_api.WithDescription(description+", duration sum"), metric_api.WithUnit("s"))
 	if err != nil {
 		log.Error(err, "unable to instantiate time counter", "metricName", name)
 		panic(err)

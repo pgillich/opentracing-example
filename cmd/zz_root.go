@@ -86,6 +86,7 @@ func initConfig() {
 func RunService(ctx context.Context, serviceType string, args []string, configViper *viper.Viper, config interface{}, newService model.NewService) error {
 	commandLine := ctx.Value(model.CtxKeyCmd)
 	log := logger.GetLogger(serviceType).WithValues(logger.KeyCmd, commandLine)
+	ctx = logger.NewContext(ctx, log)
 
 	if err := configViper.Unmarshal(config); err != nil {
 		return err
@@ -93,5 +94,5 @@ func RunService(ctx context.Context, serviceType string, args []string, configVi
 
 	log.WithValues("config", config, "type", serviceType).Info("Running...")
 
-	return errors.Wrap(newService(ctx, config, log).Run(args), "service run")
+	return errors.Wrap(newService(ctx, config).Run(args), "service run")
 }

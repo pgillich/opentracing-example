@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/pgillich/opentracing-example/internal/buildinfo"
+	"github.com/pgillich/opentracing-example/internal/logger"
 )
 
 type ErrorHandler struct {
@@ -80,10 +81,11 @@ func InitTracer(exporter sdktrace.SpanExporter, sampler sdktrace.Sampler, servic
 	return tp
 }
 
-func ChiTracerMiddleware(tr trace.Tracer, instance string, l logr.Logger) func(next http.Handler) http.Handler {
+func ChiTracerMiddleware(tr trace.Tracer, instance string, log logr.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
-			routePath := chi.RouteContext(r.Context()).RoutePath
+			ctx := logger.NewContext(r.Context(), log)
+			routePath := chi.RouteContext(ctx).RoutePath
 			if routePath == "" {
 				if r.URL.RawPath != "" {
 					routePath = r.URL.RawPath
@@ -92,16 +94,20 @@ func ChiTracerMiddleware(tr trace.Tracer, instance string, l logr.Logger) func(n
 				}
 			}
 
-			ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+			ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(r.Header))
 			span := trace.SpanFromContext(ctx)
 			clientCommand := ""
 			if span.SpanContext().IsValid() {
 				spanValues, spanValuesErr := span.SpanContext().MarshalJSON()
-				l.WithValues(
+				log = log.WithValues(
+					"traceID", span.SpanContext().TraceID().String(),
+					"spanParentID", span.SpanContext().SpanID().String(),
+				)
+				log.WithValues(
 					"span", spanValues,
 					"spanErr", spanValuesErr,
 					"bag", baggage.FromContext(ctx).String(),
-				).Info("IN Span")
+				).Info("SPAN_IN")
 				clientCommand = span.SpanContext().TraceState().Get(StateKeyClientCommand)
 			} else {
 				command := r.Method + " " + r.URL.String()
@@ -109,24 +115,30 @@ func ChiTracerMiddleware(tr trace.Tracer, instance string, l logr.Logger) func(n
 				traceState := trace.TraceState{}
 				traceState, err := traceState.Insert(StateKeyClientCommand, EncodeTracestateValue(command))
 				if err != nil {
-					l.Error(err, "unable to set command in state")
+					log.Error(err, "unable to set command in state")
 				}
 				ctx = trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
 					TraceState: traceState,
 				}))
 				bag, err := NewBaggage(instance, command)
 				if err != nil {
-					l.Error(err, "unable to set command in baggage")
+					log.Error(err, "unable to set command in baggage")
 				}
 				ctx = baggage.ContextWithBaggage(ctx, bag)
 
-				spanValues, spanValuesErr := trace.SpanFromContext(ctx).SpanContext().MarshalJSON()
-				l.WithValues(
+				span = trace.SpanFromContext(ctx)
+				log = log.WithValues(
+					"traceID", span.SpanContext().TraceID().String(),
+					"spanParentID", span.SpanContext().SpanID().String(),
+				)
+				spanValues, spanValuesErr := span.SpanContext().MarshalJSON()
+				log.WithValues(
 					"span", spanValues,
 					"spanErr", spanValuesErr,
 					"bag", bag,
-				).Info("NEW Span")
+				).Info("SPAN_NEW")
 			}
+			ctx = logger.NewContext(ctx, log)
 
 			ctx, span = tr.Start(ctx, "IN HTTP "+r.Method+" "+r.URL.String(),
 				trace.WithAttributes(semconv.NetAttributesFromHTTPRequest("tcp", r)...),
@@ -138,6 +150,11 @@ func ChiTracerMiddleware(tr trace.Tracer, instance string, l logr.Logger) func(n
 					attribute.String(SpanKeyComponent, SpanKeyComponentValue),
 				),
 			)
+			ctx, log = logger.FromContext(ctx,
+				"traceID", span.SpanContext().TraceID().String(),
+				"spanID", span.SpanContext().SpanID().String(),
+			)
+			log.Info("HTTP_SPAN")
 
 			uk := attribute.Key("username") // from HTTP header
 			span.AddEvent("IN req from user", trace.WithAttributes(append(append(

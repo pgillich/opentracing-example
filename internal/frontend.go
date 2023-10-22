@@ -61,7 +61,8 @@ type Frontend struct {
 	shutdown     <-chan struct{}
 }
 
-func NewFrontendService(ctx context.Context, cfg interface{}, log logr.Logger) model.Service {
+func NewFrontendService(ctx context.Context, cfg interface{}) model.Service {
+	_, log := logger.FromContext(ctx)
 	if config, is := cfg.(*FrontendConfig); !is {
 		log.Error(logger.ErrInvalidConfig, "config type")
 		panic(logger.ErrInvalidConfig)
@@ -138,10 +139,13 @@ func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) fu
 
 		ctx := r.Context()
 		span := trace.SpanFromContext(ctx)
+		log := s.log.WithValues(
+			"service", "frontend",
+		)
+		ctx = logr.NewContext(ctx, log)
 		defer func() {
 			spanText, _ := span.SpanContext().MarshalJSON() //nolint:errcheck // not important
-			s.log.WithValues(
-				"service", "frontend",
+			log.WithValues(
 				"span", string(spanText),
 			).Info("Span END")
 			span.End()
@@ -152,7 +156,7 @@ func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) fu
 
 		bodies := []string{}
 		errs := []error{}
-		meter := middleware.GetMeter(s.log)
+		meter := middleware.GetMeter(log)
 		sem := semaphore.NewWeighted(s.config.MaxReq)
 		type bodyRespT struct {
 			Body string
@@ -163,14 +167,21 @@ func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) fu
 			go func(be int, beURL string) {
 				bodyResp := bodyRespT{}
 				var retVal interface{}
+				jobID := fmt.Sprintf("GET %s #%d", beURL, be)
+				jobName := fmt.Sprintf("GET %s", beURL)
 				retVal, bodyResp.Err = middleware.InternalMiddlewareChain(
 					middleware.TryCatch(),
 					middleware.SemAcquire(sem),
-					middleware.StartSpan(tr, fmt.Sprintf("GET %s %d", beURL, be)),
-					middleware.Metrics(meter, "example_job", "Example job", map[string]string{
+					middleware.Span(tr, jobID),
+					middleware.Logger(map[string]string{
 						"job_type": "example",
-						"job_name": fmt.Sprintf("GET %s", beURL),
-					}, middleware.FirstErr, s.log),
+						"job_name": jobName,
+						"job_id":   jobID,
+					}, 1, 2),
+					middleware.Metrics(ctx, meter, "example_job", "Example job", map[string]string{
+						"job_type": "example",
+						"job_name": jobName,
+					}, middleware.FirstErr),
 					middleware.TryCatch(),
 				)(func(ctx context.Context) (interface{}, error) {
 					return s.sendToBackend(ctx, beURL)
@@ -201,12 +212,13 @@ func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) fu
 		}
 
 		if _, err = w.Write([]byte(strings.Join(bodies, " "))); err != nil {
-			s.log.Error(err, "unable to write response")
+			log.Error(err, "unable to write response")
 		}
 	}
 }
 
 func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, error) {
+	log := logr.FromContextOrDiscard(ctx)
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, beURL, http.NoBody,
 	)
@@ -220,6 +232,7 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 			attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),
 		)),
 	)}
+	log.Info("HTTP_OUT", "request", req)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", errors.Wrap(err, "unable to send request")

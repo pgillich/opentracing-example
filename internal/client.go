@@ -33,7 +33,8 @@ type Client struct {
 	shutdown <-chan struct{}
 }
 
-func NewClientService(ctx context.Context, cfg interface{}, log logr.Logger) model.Service {
+func NewClientService(ctx context.Context, cfg interface{}) model.Service {
+	_, log := logger.FromContext(ctx)
 	if config, is := cfg.(*ClientConfig); !is {
 		log.Error(logger.ErrInvalidConfig, "config type")
 		panic(logger.ErrInvalidConfig)

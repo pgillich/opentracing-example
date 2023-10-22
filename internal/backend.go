@@ -52,7 +52,8 @@ type Backend struct {
 	shutdown     <-chan struct{}
 }
 
-func NewBackendService(ctx context.Context, cfg interface{}, log logr.Logger) model.Service {
+func NewBackendService(ctx context.Context, cfg interface{}) model.Service {
+	_, log := logger.FromContext(ctx)
 	if config, is := cfg.(*BackendConfig); !is {
 		log.Error(logger.ErrInvalidConfig, "config type")
 		panic(logger.ErrInvalidConfig)

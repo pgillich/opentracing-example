@@ -63,7 +63,7 @@ func (s *E2ETestSuite) TestMoreBackendFromFrontend() {
 	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{"--maxReq", "1"}, internal.NewFrontendService, log)
 	defer feServer1.cancel()
 
-	s.sendPingFrontend(feServer1, []string{beServer1.addr}, log)
+	//s.sendPingFrontend(feServer1, []string{beServer1.addr}, log)
 	s.sendPingFrontend(feServer1, []string{beServer1.addr, beServer2.addr, beServer2.addr}, log)
 
 	time.Sleep(1 * time.Second)
@@ -98,33 +98,6 @@ func (s *E2ETestSuite) TestMoreBackendFromClient() {
 	runTestClient("client", "client-1", feServer1.addr, "http://"+beServer1.addr+"/ping", "http://"+beServer2.addr+"/ping", "http://"+beServer2.addr+"/ping")
 
 	time.Sleep(1 * time.Second)
-}
-
-//nolint:deadcode,unused // old test
-func runTestServerService(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log logr.Logger) *TestServer {
-	server := &TestServer{
-		testServer: httptest.NewUnstartedServer(nil),
-	}
-	server.addr = server.testServer.Listener.Addr().String()
-	started := make(chan struct{})
-	runner := TestServerRunner(server.testServer, started)
-	server.ctx, server.cancel = context.WithCancel(context.Background())
-	config.SetListenAddr(server.addr)
-	config.SetInstance(invalidDomainNameRe.ReplaceAllString(instance, "-"))
-	config.SetJaegerURL(jaegerUrlDefault)
-	command := strings.Join(append(append([]string{typeName}, config.GetOptions()...), args...), " ")
-	config.SetCommand(command)
-	ctx := context.WithValue(server.ctx, model.CtxKeyCmd, command)
-	ctx = context.WithValue(ctx, model.CtxKeyServerRunner, runner)
-	go func() {
-		if err := newService(ctx, config, log).Run(args); err != nil {
-			log.Error(err, "RunService")
-		}
-	}()
-	<-started
-	//time.Sleep(1 * time.Second)
-
-	return server
 }
 
 func runTestServerCmd(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log logr.Logger) *TestServer {

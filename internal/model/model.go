@@ -14,7 +14,7 @@ const (
 	CtxKeyServerRunner = contextKey("ServerRunner")
 )
 
-type NewService func(ctx context.Context, config interface{}, log logr.Logger) Service
+type NewService func(ctx context.Context, config interface{}) Service
 
 type Service interface {
 	Run(args []string) error
