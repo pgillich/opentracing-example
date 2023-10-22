@@ -2,16 +2,17 @@ package internal
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/go-chi/chi/v5"
 	chi_middleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/go-logr/logr"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
+	mw_server "github.com/pgillich/opentracing-example/internal/middleware/server"
 	"github.com/pgillich/opentracing-example/internal/model"
 	"github.com/pgillich/opentracing-example/internal/tracing"
 )
@@ -48,17 +49,17 @@ func (c *BackendConfig) GetOptions() []string {
 type Backend struct {
 	config       BackendConfig
 	serverRunner model.ServerRunner
-	log          logr.Logger
+	log          *slog.Logger
 	shutdown     <-chan struct{}
 }
 
 func NewBackendService(ctx context.Context, cfg interface{}) model.Service {
 	_, log := logger.FromContext(ctx)
 	if config, is := cfg.(*BackendConfig); !is {
-		log.Error(logger.ErrInvalidConfig, "config type")
+		log.Error("config type", logger.KeyError, logger.ErrInvalidConfig)
 		panic(logger.ErrInvalidConfig)
 	} else if serverRunner, is := ctx.Value(model.CtxKeyServerRunner).(model.ServerRunner); !is {
-		log.Error(ErrInvalidServerRunner, "server runner config")
+		log.Error("server runner config", logger.KeyError, ErrInvalidServerRunner)
 		panic(ErrInvalidServerRunner)
 	} else {
 		return &Backend{
@@ -71,7 +72,6 @@ func NewBackendService(ctx context.Context, cfg interface{}) model.Service {
 }
 
 func (s *Backend) Run(args []string) error {
-	s.log = s.log.WithValues("args", args)
 	var h http.Handler
 	if len(args) > 0 {
 		s.config.Response = args[0]
@@ -80,7 +80,12 @@ func (s *Backend) Run(args []string) error {
 	if s.config.Instance == "-" {
 		s.config.Instance = hostname
 	}
-	s.log.WithValues("config", s.config).Info("Backend start")
+	s.log = s.log.With("instance", s.config.Instance)
+	s.log.With(
+		logger.KeyCmd, s.config.Command,
+		"args", args,
+		"config", s.config,
+	).Info("Backend start")
 
 	traceExporter, err := tracing.JaegerProvider(s.config.JaegerURL)
 	if err != nil {
@@ -91,7 +96,7 @@ func (s *Backend) Run(args []string) error {
 	)
 	defer func() {
 		if err := tp.Shutdown(context.Background()); err != nil {
-			s.log.Error(err, "Error shutting down tracer provider")
+			s.log.Error("Error shutting down tracer provider", logger.KeyError, err)
 		}
 	}()
 	tr := tp.Tracer(
@@ -102,25 +107,16 @@ func (s *Backend) Run(args []string) error {
 	// CHI
 
 	r := chi.NewRouter()
-	r.Use(chi_middleware.RequestLogger(&logger.ChiLogr{Logger: s.log}))
 	r.Use(chi_middleware.Recoverer)
-	r.Use(tracing.ChiTracerMiddleware(tr, s.config.Instance, s.log))
+	r.Use(mw_server.ChiLoggerBaseMiddleware(s.log))
+	r.Use(mw_server.ChiTracerMiddleware(tr, s.config.Instance, s.log))
+	r.Use(mw_server.ChiLoggerMiddleware(slog.LevelInfo, slog.LevelInfo, s.log))
 
 	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		span := trace.SpanFromContext(ctx)
-		defer func() {
-			spanText, _ := span.SpanContext().MarshalJSON() //nolint:errcheck // not important
-			s.log.WithValues(
-				"service", "backend",
-				"span", string(spanText),
-			).Info("Span END")
-			span.End()
-			tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
-		}()
+		_, log := logger.FromContext(r.Context())
 
 		if _, err := w.Write([]byte(s.config.Response + hostname)); err != nil {
-			s.log.Error(err, "unable to send response")
+			log.Error("unable to send response", logger.KeyError, err)
 		}
 	})
 	h = r
@@ -130,28 +126,3 @@ func (s *Backend) Run(args []string) error {
 
 	return nil
 }
-
-/*
-	// ECHO
-
-	e := echo.New()
-	e.Use(EchoLogr(s.log))
-	e.Use(echo_middleware.Recover())
-	e.GET("/ping", func(c echo.Context) error {
-		return c.String(http.StatusOK, s.config.Response) //nolint:wrapcheck // Echo
-	})
-	h = e
-*/
-
-/*
-	// GIN
-
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
-	router.Use(ginlogr.Ginlogr(s.log, time.RFC3339, false))
-	router.Use(ginlogr.RecoveryWithLogr(s.log, time.RFC3339, false, true))
-	router.GET("/ping", func(c *gin.Context) {
-		c.String(http.StatusOK, s.config.Response)
-	})
-	h = router.Handler()
-*/

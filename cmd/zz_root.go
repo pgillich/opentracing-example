@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"emperror.dev/errors"
+	"github.com/sagikazarmark/slog-shim"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -41,7 +42,7 @@ func Execute(ctx context.Context, args []string, serverRunner model.ServerRunner
 	rootCmd.SetArgs(args)
 	rootCmd.SetContext(ctx)
 	if err := rootCmd.Execute(); err != nil {
-		logger.GetLogger(rootCmd.Use).Error(err, "Bad", "args", args)
+		logger.GetLogger(rootCmd.Use, slog.LevelDebug).Error("Bad", logger.KeyError, err, "args", args)
 		os.Exit(1)
 	}
 }
@@ -79,20 +80,21 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		logger.GetLogger(rootCmd.Use).Info("Using config file", "path", viper.ConfigFileUsed())
+		logger.GetLogger(rootCmd.Use, slog.LevelDebug).Info("Using config file", "path", viper.ConfigFileUsed())
 	}
 }
 
 func RunService(ctx context.Context, serviceType string, args []string, configViper *viper.Viper, config interface{}, newService model.NewService) error {
-	commandLine := ctx.Value(model.CtxKeyCmd)
-	log := logger.GetLogger(serviceType).WithValues(logger.KeyCmd, commandLine)
+	log := logger.GetLogger(serviceType, slog.LevelDebug).With(
+		"service", serviceType,
+	)
 	ctx = logger.NewContext(ctx, log)
 
 	if err := configViper.Unmarshal(config); err != nil {
 		return err
 	}
 
-	log.WithValues("config", config, "type", serviceType).Info("Running...")
+	log.With("config", config).Info("Running...")
 
 	return errors.Wrap(newService(ctx, config).Run(args), "service run")
 }

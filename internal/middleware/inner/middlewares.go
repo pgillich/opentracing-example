@@ -1,22 +1,24 @@
 // Goroutine middlewares
-package middleware
+package inner
 
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
 	"emperror.dev/errors"
-	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	metric_api "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/semaphore"
+
+	"github.com/pgillich/opentracing-example/internal/logger"
 )
 
 const (
@@ -56,15 +58,18 @@ func SemAcquire(sem *semaphore.Weighted) InternalMiddleware {
 func Span(tr trace.Tracer, spanName string) InternalMiddleware {
 	return func(next InternalMiddlewareFn) InternalMiddlewareFn {
 		return func(ctx context.Context) (interface{}, error) {
-			spanParent := trace.SpanFromContext(ctx).SpanContext()
+			//spanParent := trace.SpanFromContext(ctx).SpanContext()
+			spanKind := trace.SpanKindInternal
 			ctx, spanChild := tr.Start(ctx, spanName,
-				trace.WithSpanKind(trace.SpanKindInternal),
+				trace.WithSpanKind(spanKind),
 			)
-			ctx = logr.NewContext(ctx, logr.FromContextOrDiscard(ctx).WithValues(
-				"traceID", spanParent.TraceID().String(),
-				"spanParentID", spanParent.SpanID().String(),
+			ctx, _ = logger.FromContext(ctx,
+				/*
+					"traceID", spanParent.TraceID().String(),
+					"spanParentID", spanParent.SpanID().String(),
+				*/
 				"spanID", spanChild.SpanContext().SpanID().String(),
-			))
+			)
 
 			defer spanChild.End()
 
@@ -112,7 +117,7 @@ func tryCatch(f func()) func() error {
 
 // Logger is a middleware for logging begin and end messages.
 // A new logger with values is added to the context.
-func Logger(values map[string]string, beginLevel int, endLevel int) InternalMiddleware {
+func Logger(values map[string]string, beginLevel slog.Level, endLevel slog.Level) InternalMiddleware {
 	logValues := make([]any, 0, len(values)*2)
 	for k, v := range values {
 		logValues = append(logValues, k, v)
@@ -120,16 +125,21 @@ func Logger(values map[string]string, beginLevel int, endLevel int) InternalMidd
 
 	return func(next InternalMiddlewareFn) InternalMiddlewareFn {
 		return func(ctx context.Context) (interface{}, error) {
-			log := logr.FromContextOrDiscard(ctx)
-			log = log.WithValues(logValues...)
-			ctx = logr.NewContext(ctx, log)
-			log.V(beginLevel).Info("GO_BEGIN")
+			var log *slog.Logger
+			var err error
+			ctx, log = logger.FromContext(ctx, logValues...)
+			log.Log(ctx, beginLevel, "GO_BEGIN")
 			beginTS := time.Now()
+			defer func() {
+				elapsedSec := time.Since(beginTS).Seconds()
+				args := []any{"duration", fmt.Sprintf("%.3f", elapsedSec)}
+				if err != nil {
+					args = append(args, logger.KeyError, err)
+				}
+				log.With(args...).Log(ctx, endLevel, "GO_END")
+			}()
 
 			retVal, err := next(ctx)
-
-			elapsedSec := time.Since(beginTS).Seconds()
-			log.WithValues("duration", fmt.Sprintf("%.3f", elapsedSec)).V(endLevel).Info("GO_END")
 
 			return retVal, err
 		}
@@ -149,19 +159,19 @@ Metrics is a middleware to make count and duration report
 func Metrics(ctx context.Context, meter metric_api.Meter, name string,
 	description string, attributes map[string]string, errFormatter ErrFormatter,
 ) InternalMiddleware {
-	log := logr.FromContextOrDiscard(ctx)
+	_, log := logger.FromContext(ctx)
 	baseAttrs := make([]attribute.KeyValue, 0, len(attributes))
 	for aKey, aVal := range attributes {
 		baseAttrs = append(baseAttrs, attribute.Key(aKey).String(aVal))
 	}
 	attempted, err := regInt64Counter.GetInstrument(name, metric_api.WithDescription(description))
 	if err != nil {
-		log.Error(err, "unable to instantiate counter", "metricName", name)
+		log.Error("unable to instantiate counter", logger.KeyError, err, "metricName", name)
 		panic(err)
 	}
 	durationSum, err := regFloat64Counter.GetInstrument(name+"_duration", metric_api.WithDescription(description+", duration sum"), metric_api.WithUnit("s"))
 	if err != nil {
-		log.Error(err, "unable to instantiate time counter", "metricName", name)
+		log.Error("unable to instantiate time counter", logger.KeyError, err, "metricName", name)
 		panic(err)
 	}
 
@@ -222,11 +232,11 @@ var (
 
 // GetMeter returns the default meter
 // Inits meter and InstrumentRegs (if needed)
-func GetMeter(log logr.Logger) metric_api.Meter {
+func GetMeter(log *slog.Logger) metric_api.Meter {
 	meterOnce.Do(func() {
 		exporter, err := prometheus.New()
 		if err != nil {
-			log.Error(err, "unable to instantiate prometheus exporter")
+			log.Error("unable to instantiate prometheus exporter", logger.KeyError, err)
 			panic(err)
 		}
 		provider := metric.NewMeterProvider(metric.WithReader(exporter))

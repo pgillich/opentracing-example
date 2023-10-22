@@ -2,9 +2,8 @@ package model
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
-
-	"github.com/go-logr/logr"
 )
 
 type contextKey string
@@ -20,4 +19,4 @@ type Service interface {
 	Run(args []string) error
 }
 
-type ServerRunner func(h http.Handler, shutdown <-chan struct{}, addr string, l logr.Logger)
+type ServerRunner func(h http.Handler, shutdown <-chan struct{}, addr string, l *slog.Logger)

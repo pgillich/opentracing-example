@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -10,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/pgillich/opentracing-example/cmd"
 	"github.com/pgillich/opentracing-example/internal"
 	"github.com/pgillich/opentracing-example/internal/logger"
@@ -49,11 +49,11 @@ type TestClient struct {
 	cancel context.CancelFunc
 }
 
-type runTestServerType func(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log logr.Logger) *TestServer
+type runTestServerType func(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log *slog.Logger) *TestServer
 
 func (s *E2ETestSuite) TestMoreBackendFromFrontend() {
-	log := logger.GetLogger(s.T().Name())
-	tracing.SetErrorHandlerLogger(&log)
+	log := logger.GetLogger(s.T().Name(), slog.LevelDebug)
+	tracing.SetErrorHandlerLogger(log)
 	var runTestServer runTestServerType = runTestServerCmd
 
 	beServer1 := runTestServer("backend", "backend-1", &internal.BackendConfig{}, []string{"PONG_1"}, internal.NewBackendService, log)
@@ -63,13 +63,13 @@ func (s *E2ETestSuite) TestMoreBackendFromFrontend() {
 	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{"--maxReq", "1"}, internal.NewFrontendService, log)
 	defer feServer1.cancel()
 
-	//s.sendPingFrontend(feServer1, []string{beServer1.addr}, log)
+	s.sendPingFrontend(feServer1, []string{beServer1.addr}, log)
 	s.sendPingFrontend(feServer1, []string{beServer1.addr, beServer2.addr, beServer2.addr}, log)
 
 	time.Sleep(1 * time.Second)
 }
 
-func (s *E2ETestSuite) sendPingFrontend(feServer *TestServer, beServerAddrs []string, log logr.Logger) {
+func (s *E2ETestSuite) sendPingFrontend(feServer *TestServer, beServerAddrs []string, log *slog.Logger) {
 	for a := range beServerAddrs {
 		beServerAddrs[a] = "http://" + beServerAddrs[a] + "/ping"
 	}
@@ -84,8 +84,8 @@ func (s *E2ETestSuite) sendPingFrontend(feServer *TestServer, beServerAddrs []st
 }
 
 func (s *E2ETestSuite) TestMoreBackendFromClient() {
-	log := logger.GetLogger(s.T().Name())
-	tracing.SetErrorHandlerLogger(&log)
+	log := logger.GetLogger(s.T().Name(), slog.LevelDebug)
+	tracing.SetErrorHandlerLogger(log)
 	var runTestServer runTestServerType = runTestServerCmd
 
 	beServer1 := runTestServer("backend", "backend-1", &internal.BackendConfig{}, []string{"PONG_1"}, internal.NewBackendService, log)
@@ -100,7 +100,7 @@ func (s *E2ETestSuite) TestMoreBackendFromClient() {
 	time.Sleep(1 * time.Second)
 }
 
-func runTestServerCmd(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log logr.Logger) *TestServer {
+func runTestServerCmd(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log *slog.Logger) *TestServer {
 	server := &TestServer{
 		testServer: httptest.NewUnstartedServer(nil),
 	}

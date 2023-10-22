@@ -2,15 +2,15 @@ package logger
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"sync"
 
 	"emperror.dev/errors"
-	"github.com/bombsimon/logrusr/v3"
-	"github.com/go-logr/logr"
-	"github.com/sirupsen/logrus"
 )
 
 const (
+	KeyError      = "error"
 	KeyCmd        = "command"
 	defaltAppName = "unknown"
 )
@@ -19,43 +19,51 @@ var ErrInvalidConfig = errors.NewPlain("invalid config")
 
 var loggers = sync.Map{} //nolint:gochecknoglobals // simple logging
 
-func FromContext(ctx context.Context, keysAndValues ...interface{}) (context.Context, logr.Logger) {
+// contextKey is how we find Loggers in a context.Context.
+type contextKey struct{}
+
+// FromContext returns a Logger from ctx or creates it if no Logger is found.
+func FromContext(ctx context.Context, keysAndValues ...interface{}) (context.Context, *slog.Logger) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	var log logr.Logger
-	var err error
+	var log *slog.Logger
+	var has bool
 	var store bool
-	if log, err = logr.FromContext(ctx); err != nil {
-		log = GetLogger(defaltAppName)
+	if log, has = ctx.Value(contextKey{}).(*slog.Logger); !has || log == nil {
+		log = GetLogger(defaltAppName, slog.LevelDebug)
 		store = true
 	}
 	if len(keysAndValues) > 0 {
-		log = log.WithValues(keysAndValues...)
+		log = log.With(keysAndValues...)
 		store = true
 	}
 	if store {
-		ctx = logr.NewContext(ctx, log)
+		ctx = NewContext(ctx, log)
 	}
 
 	return ctx, log
 }
 
-func NewContext(ctx context.Context, log logr.Logger) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
+// NewContext returns a new Context, derived from ctx, which carries the
+// provided Logger.
+func NewContext(ctx context.Context, logger *slog.Logger) context.Context {
+	if logger == nil {
+		logger = GetLogger(defaltAppName, slog.LevelDebug)
 	}
 
-	return logr.NewContext(ctx, log)
+	return context.WithValue(ctx, contextKey{}, logger)
 }
 
-func GetLogger(app string) logr.Logger {
+// GetLogger returns a registered logger with app name.
+// Creates a new instance, if not exists (uses the level only in this case)
+func GetLogger(app string, level slog.Level) *slog.Logger {
 	if logger, has := loggers.Load(app); has {
-		return logger.(logr.Logger) //nolint:forcetypeassert // always logr.Logger
+		return logger.(*slog.Logger) //nolint:forcetypeassert // always *slog.Logger
 	}
-	lr := logrus.New()
-	lr.Level = logrus.TraceLevel
-	logger := logrusr.New(lr).WithName(app)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: level,
+	})).With("logger", app)
 	loggers.Store(app, logger)
 
 	return logger

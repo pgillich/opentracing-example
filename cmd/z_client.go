@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sagikazarmark/slog-shim"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -40,7 +41,7 @@ func init() {
 	clientCmd.Flags().String("instance", "#3", "Client instance")
 	clientCmd.Flags().String("jaegerURL", "http://localhost:14268/api/traces", "Jaeger collector address")
 	if err := clientViper.BindPFlags(clientCmd.Flags()); err != nil {
-		logger.GetLogger(clientCmd.Use).Error(err, "Unable to bind flags")
+		logger.GetLogger(clientCmd.Use, slog.LevelDebug).Error("Unable to bind flags", logger.KeyError, err)
 		panic(err)
 	}
 	clientViper.AutomaticEnv()

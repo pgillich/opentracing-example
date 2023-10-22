@@ -1,5 +1,5 @@
 // Goroutine middlewares
-package middleware
+package inner
 
 import (
 	"context"

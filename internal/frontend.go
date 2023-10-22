@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"emperror.dev/errors"
 	"github.com/go-chi/chi/v5"
 	chi_middleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -21,7 +21,9 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
-	"github.com/pgillich/opentracing-example/internal/middleware"
+	mw_client "github.com/pgillich/opentracing-example/internal/middleware/client"
+	mw_inner "github.com/pgillich/opentracing-example/internal/middleware/inner"
+	mw_server "github.com/pgillich/opentracing-example/internal/middleware/server"
 	"github.com/pgillich/opentracing-example/internal/model"
 	"github.com/pgillich/opentracing-example/internal/tracing"
 )
@@ -57,17 +59,17 @@ func (c *FrontendConfig) GetOptions() []string {
 type Frontend struct {
 	config       FrontendConfig
 	serverRunner model.ServerRunner
-	log          logr.Logger
+	log          *slog.Logger
 	shutdown     <-chan struct{}
 }
 
 func NewFrontendService(ctx context.Context, cfg interface{}) model.Service {
 	_, log := logger.FromContext(ctx)
 	if config, is := cfg.(*FrontendConfig); !is {
-		log.Error(logger.ErrInvalidConfig, "config type")
+		log.Error("config type", logger.KeyError, logger.ErrInvalidConfig)
 		panic(logger.ErrInvalidConfig)
 	} else if serverRunner, is := ctx.Value(model.CtxKeyServerRunner).(model.ServerRunner); !is {
-		log.Error(ErrInvalidServerRunner, "server runner config")
+		log.Error("server runner config", logger.KeyError, ErrInvalidServerRunner)
 		panic(ErrInvalidServerRunner)
 	} else {
 		return &Frontend{
@@ -80,12 +82,16 @@ func NewFrontendService(ctx context.Context, cfg interface{}) model.Service {
 }
 
 func (s *Frontend) Run(args []string) error {
-	s.log = s.log.WithValues("args", args)
 	var h http.Handler
 	if s.config.Instance == "-" {
 		s.config.Instance, _ = os.Hostname() //nolint:errcheck // not important
 	}
-	s.log.WithValues("config", s.config).Info("Frontend start")
+	s.log = s.log.With("instance", s.config.Instance)
+	s.log.With(
+		logger.KeyCmd, s.config.Command,
+		"args", args,
+		"config", s.config,
+	).Info("Frontend start")
 
 	traceExporter, err := tracing.JaegerProvider(s.config.JaegerURL)
 	if err != nil {
@@ -96,7 +102,7 @@ func (s *Frontend) Run(args []string) error {
 	)
 	defer func() {
 		if err := tp.Shutdown(context.Background()); err != nil {
-			s.log.Error(err, "Error shutting down tracer provider")
+			s.log.Error("Error shutting down tracer provider", logger.KeyError, err)
 		}
 	}()
 	tr := tp.Tracer(
@@ -107,9 +113,10 @@ func (s *Frontend) Run(args []string) error {
 	// CHI
 
 	r := chi.NewRouter()
-	r.Use(chi_middleware.RequestLogger(&logger.ChiLogr{Logger: s.log}))
 	r.Use(chi_middleware.Recoverer)
-	r.Use(tracing.ChiTracerMiddleware(tr, s.config.Instance, s.log))
+	r.Use(mw_server.ChiLoggerBaseMiddleware(s.log))
+	r.Use(mw_server.ChiTracerMiddleware(tr, s.config.Instance, s.log))
+	r.Use(mw_server.ChiLoggerMiddleware(slog.LevelInfo, slog.LevelInfo, s.log))
 
 	r.Handle("/metrics", promhttp.Handler())
 
@@ -124,6 +131,7 @@ func (s *Frontend) Run(args []string) error {
 
 func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, log := logger.FromContext(r.Context())
 		if r.Body == nil {
 			s.writeErr(w, http.StatusInternalServerError, errors.New("empty response"))
 
@@ -137,26 +145,11 @@ func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) fu
 			return
 		}
 
-		ctx := r.Context()
-		span := trace.SpanFromContext(ctx)
-		log := s.log.WithValues(
-			"service", "frontend",
-		)
-		ctx = logr.NewContext(ctx, log)
-		defer func() {
-			spanText, _ := span.SpanContext().MarshalJSON() //nolint:errcheck // not important
-			log.WithValues(
-				"span", string(spanText),
-			).Info("Span END")
-			span.End()
-			tp.ForceFlush(context.Background()) //nolint:errcheck,gosec // not important
-		}()
-
 		inBodies := strings.Split(string(inBody), " ")
 
 		bodies := []string{}
 		errs := []error{}
-		meter := middleware.GetMeter(log)
+		meter := mw_inner.GetMeter(log)
 		sem := semaphore.NewWeighted(s.config.MaxReq)
 		type bodyRespT struct {
 			Body string
@@ -169,20 +162,20 @@ func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) fu
 				var retVal interface{}
 				jobID := fmt.Sprintf("GET %s #%d", beURL, be)
 				jobName := fmt.Sprintf("GET %s", beURL)
-				retVal, bodyResp.Err = middleware.InternalMiddlewareChain(
-					middleware.TryCatch(),
-					middleware.SemAcquire(sem),
-					middleware.Span(tr, jobID),
-					middleware.Logger(map[string]string{
+				retVal, bodyResp.Err = mw_inner.InternalMiddlewareChain(
+					mw_inner.TryCatch(),
+					mw_inner.SemAcquire(sem),
+					mw_inner.Span(tr, jobID),
+					mw_inner.Logger(map[string]string{
 						"job_type": "example",
 						"job_name": jobName,
 						"job_id":   jobID,
-					}, 1, 2),
-					middleware.Metrics(ctx, meter, "example_job", "Example job", map[string]string{
+					}, slog.LevelInfo, slog.LevelDebug),
+					mw_inner.Metrics(ctx, meter, "example_job", "Example job", map[string]string{
 						"job_type": "example",
 						"job_name": jobName,
-					}, middleware.FirstErr),
-					middleware.TryCatch(),
+					}, mw_inner.FirstErr),
+					mw_inner.TryCatch(),
 				)(func(ctx context.Context) (interface{}, error) {
 					return s.sendToBackend(ctx, beURL)
 				})(ctx)
@@ -190,7 +183,7 @@ func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) fu
 					var is bool
 					bodyResp.Body, is = retVal.(string)
 					if !is {
-						bodyResp.Err = fmt.Errorf("%w: %t", middleware.ErrTypeCast, retVal)
+						bodyResp.Err = fmt.Errorf("%w: %t", mw_inner.ErrTypeCast, retVal)
 					}
 				}
 
@@ -212,13 +205,13 @@ func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) fu
 		}
 
 		if _, err = w.Write([]byte(strings.Join(bodies, " "))); err != nil {
-			log.Error(err, "unable to write response")
+			log.Error("unable to write response", logger.KeyError, err)
 		}
 	}
 }
 
 func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, error) {
-	log := logr.FromContextOrDiscard(ctx)
+	_, log := logger.FromContext(ctx)
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, beURL, http.NoBody,
 	)
@@ -226,13 +219,12 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 		return "", errors.Wrap(err, "unable to send request")
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(
-		http.DefaultTransport,
+		mw_client.NewTransport(http.DefaultTransport, slog.LevelInfo, slog.LevelInfo, log),
 		otelhttp.WithPropagators(otel.GetTextMapPropagator()),
 		otelhttp.WithSpanOptions(trace.WithAttributes(
 			attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),
 		)),
 	)}
-	log.Info("HTTP_OUT", "request", req)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", errors.Wrap(err, "unable to send request")
