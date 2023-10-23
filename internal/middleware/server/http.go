@@ -11,11 +11,13 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/baggage"
+	metric_api "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.11.0"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
+	"github.com/pgillich/opentracing-example/internal/middleware"
 	"github.com/pgillich/opentracing-example/internal/tracing"
 )
 
@@ -36,7 +38,7 @@ func ChiLoggerBaseMiddleware(log *slog.Logger) func(next http.Handler) http.Hand
 	}
 }
 
-func ChiTracerMiddleware(tr trace.Tracer, instance string, log *slog.Logger) func(next http.Handler) http.Handler {
+func ChiTracerMiddleware(tr trace.Tracer, instance string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			ctx, log := logger.FromContext(r.Context())
@@ -117,7 +119,7 @@ func ChiTracerMiddleware(tr trace.Tracer, instance string, log *slog.Logger) fun
 	}
 }
 
-func ChiLoggerMiddleware(beginLevel slog.Level, endLevel slog.Level, log *slog.Logger) func(next http.Handler) http.Handler {
+func ChiLoggerMiddleware(beginLevel slog.Level, endLevel slog.Level) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			ctx, log := logger.FromContext(r.Context())
@@ -126,18 +128,67 @@ func ChiLoggerMiddleware(beginLevel slog.Level, endLevel slog.Level, log *slog.L
 
 			log.Log(ctx, beginLevel, "IN_HTTP")
 			beginTS := time.Now()
-			defer func() {
-				elapsedSec := time.Since(beginTS).Seconds()
-				log.With(
-					"inPath", routePath,
-					"inStatusCode", lrw.statusCode,
-					"inContentLength", w.Header().Get("Content-Length"),
-					"inDuration", fmt.Sprintf("%.3f", elapsedSec),
-				).Log(ctx, endLevel, "IN_HTTP_RESP")
-			}()
 
 			r = r.WithContext(ctx)
 			next.ServeHTTP(lrw, r)
+
+			elapsedSec := time.Since(beginTS).Seconds()
+			log.With(
+				"inPathPattern", routePath,
+				"inStatusCode", lrw.statusCode,
+				"inReqContentLength", r.ContentLength,
+				"inRespContentLength", w.Header().Get("Content-Length"),
+				"inDuration", fmt.Sprintf("%.3f", elapsedSec),
+			).Log(ctx, endLevel, "IN_HTTP_RESP")
+		}
+
+		return http.HandlerFunc(fn)
+	}
+}
+
+func ChiMetricMiddleware(meter metric_api.Meter, name string,
+	description string, attributes map[string]string, log *slog.Logger,
+) func(next http.Handler) http.Handler {
+	baseAttrs := make([]attribute.KeyValue, 0, len(attributes))
+	for aKey, aVal := range attributes {
+		baseAttrs = append(baseAttrs, attribute.Key(aKey).String(aVal))
+	}
+	attempted, err := middleware.Int64CounterGetInstrument(name, metric_api.WithDescription(description))
+	if err != nil {
+		log.Error("unable to instantiate counter", logger.KeyError, err, "metricName", name)
+		panic(err)
+	}
+	durationSum, err := middleware.Float64CounterGetInstrument(name+"_duration", metric_api.WithDescription(description+", duration sum"), metric_api.WithUnit("s"))
+	if err != nil {
+		log.Error("unable to instantiate time counter", logger.KeyError, err, "metricName", name)
+		panic(err)
+	}
+
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			ctx, _ := logger.FromContext(r.Context())
+			routePath := getRoutePath(ctx, r)
+			lrw := NewLoggingResponseWriter(w)
+
+			beginTS := time.Now()
+
+			next.ServeHTTP(lrw, r)
+
+			elapsedSec := time.Since(beginTS).Seconds()
+			attrs := make([]attribute.KeyValue, len(baseAttrs), len(baseAttrs)+6)
+			copy(attrs, baseAttrs)
+			host := middleware.GetHost(r)
+			attrs = append(attrs,
+				attribute.Key(middleware.MetrAttrMethod).String(r.Method),
+				attribute.Key(middleware.MetrAttrUrl).String(r.URL.String()),
+				attribute.Key(middleware.MetrAttrHost).String(host),
+				attribute.Key(middleware.MetrAttrPath).String(r.URL.Path),
+				attribute.Key(middleware.MetrAttrPathPattern).String(routePath),
+				attribute.Key(middleware.MetrAttrStatus).Int(lrw.statusCode),
+			)
+			opt := metric_api.WithAttributes(attrs...)
+			attempted.Add(ctx, 1, opt)
+			durationSum.Add(ctx, elapsedSec, opt)
 		}
 
 		return http.HandlerFunc(fn)

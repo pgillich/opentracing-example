@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
+	"github.com/pgillich/opentracing-example/internal/middleware"
 	mw_server "github.com/pgillich/opentracing-example/internal/middleware/server"
 	"github.com/pgillich/opentracing-example/internal/model"
 	"github.com/pgillich/opentracing-example/internal/tracing"
@@ -109,8 +110,13 @@ func (s *Backend) Run(args []string) error {
 	r := chi.NewRouter()
 	r.Use(chi_middleware.Recoverer)
 	r.Use(mw_server.ChiLoggerBaseMiddleware(s.log))
-	r.Use(mw_server.ChiTracerMiddleware(tr, s.config.Instance, s.log))
-	r.Use(mw_server.ChiLoggerMiddleware(slog.LevelInfo, slog.LevelInfo, s.log))
+	r.Use(mw_server.ChiTracerMiddleware(tr, s.config.Instance))
+	r.Use(mw_server.ChiLoggerMiddleware(slog.LevelInfo, slog.LevelInfo))
+	r.Use(mw_server.ChiMetricMiddleware(middleware.GetMeter(s.log),
+		"http_in", "HTTP in response", map[string]string{
+			"service": "backend",
+		}, s.log,
+	))
 
 	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		_, log := logger.FromContext(r.Context())

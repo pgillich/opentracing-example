@@ -34,7 +34,7 @@ var onceSetOtel sync.Once          //nolint:gochecknoglobals // local once
 var onceBodySetOtel = func() {     //nolint:gochecknoglobals // local once
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	otel.SetErrorHandler(errorHandler)
-	// TODO logr --> slog
+	// TODO logr --> slog, see: https://github.com/go-logr/logr/pull/196
 	//otel.SetLogger(*errorHandler.log)
 }
 

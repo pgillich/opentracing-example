@@ -23,6 +23,24 @@ var loggers = sync.Map{} //nolint:gochecknoglobals // simple logging
 type contextKey struct{}
 
 // FromContext returns a Logger from ctx or creates it if no Logger is found.
+// If it creates or there are fields, the returned context is a new child.
+//
+// Full example usage (logger and context will be changed, context will be passed towards):
+//
+//	var log utilslog.Logger
+//	ctx, log = utilslog.FromContext(ctx,
+//		LogKeyOutServerUri: url,
+//	)
+//
+// Simple example usage (logger and context won't be changed):
+//
+//	_, log := utilslog.FromContext(ctx)
+//
+// Advanced example usage (logger and context will be changed, context won't be passed towards):
+//
+//	_, log := utilslog.LoggerFromCtx(ctx,
+//		LogKeyOutServerUri: url,
+//	)
 func FromContext(ctx context.Context, keysAndValues ...interface{}) (context.Context, *slog.Logger) {
 	if ctx == nil {
 		ctx = context.Background()

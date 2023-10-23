@@ -21,6 +21,7 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"github.com/pgillich/opentracing-example/internal/logger"
+	"github.com/pgillich/opentracing-example/internal/middleware"
 	mw_client "github.com/pgillich/opentracing-example/internal/middleware/client"
 	mw_inner "github.com/pgillich/opentracing-example/internal/middleware/inner"
 	mw_server "github.com/pgillich/opentracing-example/internal/middleware/server"
@@ -115,8 +116,13 @@ func (s *Frontend) Run(args []string) error {
 	r := chi.NewRouter()
 	r.Use(chi_middleware.Recoverer)
 	r.Use(mw_server.ChiLoggerBaseMiddleware(s.log))
-	r.Use(mw_server.ChiTracerMiddleware(tr, s.config.Instance, s.log))
-	r.Use(mw_server.ChiLoggerMiddleware(slog.LevelInfo, slog.LevelInfo, s.log))
+	r.Use(mw_server.ChiTracerMiddleware(tr, s.config.Instance))
+	r.Use(mw_server.ChiLoggerMiddleware(slog.LevelInfo, slog.LevelInfo))
+	r.Use(mw_server.ChiMetricMiddleware(middleware.GetMeter(s.log),
+		"http_in", "HTTP in response", map[string]string{
+			"service": "frontend",
+		}, s.log,
+	))
 
 	r.Handle("/metrics", promhttp.Handler())
 
@@ -149,7 +155,7 @@ func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) fu
 
 		bodies := []string{}
 		errs := []error{}
-		meter := mw_inner.GetMeter(log)
+		meter := middleware.GetMeter(log)
 		sem := semaphore.NewWeighted(s.config.MaxReq)
 		type bodyRespT struct {
 			Body string
@@ -174,7 +180,7 @@ func (s *Frontend) proxyHandler(tp *sdktrace.TracerProvider, tr trace.Tracer) fu
 					mw_inner.Metrics(ctx, meter, "example_job", "Example job", map[string]string{
 						"job_type": "example",
 						"job_name": jobName,
-					}, mw_inner.FirstErr),
+					}, middleware.FirstErr),
 					mw_inner.TryCatch(),
 				)(func(ctx context.Context) (interface{}, error) {
 					return s.sendToBackend(ctx, beURL)
@@ -219,7 +225,19 @@ func (s *Frontend) sendToBackend(ctx context.Context, beURL string) (string, err
 		return "", errors.Wrap(err, "unable to send request")
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(
-		mw_client.NewTransport(http.DefaultTransport, slog.LevelInfo, slog.LevelInfo, log),
+		mw_client.NewMetricTransport(
+			mw_client.NewLogTransport(
+				http.DefaultTransport,
+				slog.LevelInfo,
+				slog.LevelInfo,
+			),
+			middleware.GetMeter(log),
+			"http_out", "HTTP out response", map[string]string{
+				"service":        "frontend",
+				"target_service": "backend",
+			},
+			middleware.FirstErr,
+		),
 		otelhttp.WithPropagators(otel.GetTextMapPropagator()),
 		otelhttp.WithSpanOptions(trace.WithAttributes(
 			attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),

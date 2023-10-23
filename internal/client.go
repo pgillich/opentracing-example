@@ -8,10 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pgillich/opentracing-example/internal/logger"
-	mw_client "github.com/pgillich/opentracing-example/internal/middleware/client"
-	"github.com/pgillich/opentracing-example/internal/model"
-	"github.com/pgillich/opentracing-example/internal/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -19,6 +15,12 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.11.0"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/pgillich/opentracing-example/internal/logger"
+	"github.com/pgillich/opentracing-example/internal/middleware"
+	mw_client "github.com/pgillich/opentracing-example/internal/middleware/client"
+	"github.com/pgillich/opentracing-example/internal/model"
+	"github.com/pgillich/opentracing-example/internal/tracing"
 )
 
 type ClientConfig struct {
@@ -68,7 +70,19 @@ func (c *Client) Run(args []string) error {
 		}
 	}()
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(
-		mw_client.NewTransport(http.DefaultTransport, slog.LevelInfo, slog.LevelInfo, c.log),
+		mw_client.NewMetricTransport(
+			mw_client.NewLogTransport(
+				http.DefaultTransport,
+				slog.LevelInfo,
+				slog.LevelInfo,
+			),
+			middleware.GetMeter(c.log),
+			"http_out", "HTTP out response", map[string]string{
+				"service":        "client",
+				"target_service": "frontend",
+			},
+			middleware.FirstErr,
+		),
 		otelhttp.WithPropagators(otel.GetTextMapPropagator()),
 		otelhttp.WithSpanOptions(trace.WithAttributes(
 			attribute.String(tracing.SpanKeyComponent, tracing.SpanKeyComponentValue),

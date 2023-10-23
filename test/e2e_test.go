@@ -95,9 +95,12 @@ func (s *E2ETestSuite) TestMoreBackendFromClient() {
 	feServer1 := runTestServer("frontend", "frontend", &internal.FrontendConfig{}, []string{}, internal.NewFrontendService, log)
 	defer feServer1.cancel()
 
-	runTestClient("client", "client-1", feServer1.addr, "http://"+beServer1.addr+"/ping", "http://"+beServer2.addr+"/ping", "http://"+beServer2.addr+"/ping")
+	runTestClient("client", "client-1", feServer1.addr,
+		"http://"+beServer1.addr+"/ping?x=a",
+		"http://"+beServer2.addr+"/ping-no?y=b", "http://"+beServer2.addr+"0/ping?z=c",
+	)
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(80 * time.Second)
 }
 
 func runTestServerCmd(typeName string, instance string, config internal.ConfigSetter, args []string, newService model.NewService, log *slog.Logger) *TestServer {
