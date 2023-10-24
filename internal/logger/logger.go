@@ -79,7 +79,10 @@ func GetLogger(app string, level slog.Level) *slog.Logger {
 	if logger, has := loggers.Load(app); has {
 		return logger.(*slog.Logger) //nolint:forcetypeassert // always *slog.Logger
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+	newHandler := slog.NewTextHandler
+	//newHandler := slog.NewJSONHandler
+
+	logger := slog.New(newHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})).With("logger", app)
 	loggers.Store(app, logger)
