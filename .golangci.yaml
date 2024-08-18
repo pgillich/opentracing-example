@@ -4,7 +4,7 @@ run:
     - internal/models
     - internal/restapi
   tests: true
-  go: '1.17'
+  go: '1.22'
 
 linters-settings:
   errcheck:
@@ -76,6 +76,7 @@ linters:
     - exhaustruct
     - nosnakecase
     - depguard
+    - nlreturn
 issues:
   exclude-use-default: false
   exclude-rules:

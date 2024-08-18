@@ -11,12 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pgillich/opentracing-example/cmd"
 	"github.com/pgillich/opentracing-example/internal"
 	"github.com/pgillich/opentracing-example/internal/logger"
 	"github.com/pgillich/opentracing-example/internal/model"
 	"github.com/pgillich/opentracing-example/internal/tracing"
-	"github.com/stretchr/testify/suite"
 )
 
 const (
@@ -99,6 +100,31 @@ func (s *E2ETestSuite) TestMoreBackendFromClient() {
 		"http://"+beServer1.addr+"/ping?x=a",
 		"http://"+beServer2.addr+"/ping-no?y=b", "http://"+beServer2.addr+"0/ping?z=c",
 	)
+
+	time.Sleep(80 * time.Second)
+}
+
+func (s *E2ETestSuite) TestOidcFromClient() {
+	log := logger.GetLogger(s.T().Name(), slog.LevelDebug)
+	tracing.SetErrorHandlerLogger(log)
+	var runTestServer runTestServerType = runTestServerCmd
+
+	oidcServer1 := runTestServer("oidc", "oidc-1", &internal.OidcConfig{}, []string{
+		"--oauth2ClientID", "<Client ID>",
+		"--oauth2ClientSecret", "<Client Secret>",
+		"--httpClientCaptureMode", "2",
+		"--httpClientCaptureDir", "oidc_client_cap",
+	}, internal.NewOidcService, log)
+	defer oidcServer1.cancel()
+
+	httpClient := http.DefaultClient
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+oidcServer1.addr, http.NoBody)
+	s.NotZero(err, "Unable to create request: %s", err)
+	resp, err := httpClient.Do(r)
+	s.NotZero(err, "Unable to do request: %s", err)
+	s.T().Log("Resp:", resp)
 
 	time.Sleep(80 * time.Second)
 }

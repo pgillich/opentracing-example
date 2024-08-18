@@ -138,7 +138,7 @@ func (t *MetricTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	res, err = t.rt.RoundTrip(r)
 
 	elapsedSec := time.Since(beginTS).Seconds()
-	attrs := make([]attribute.KeyValue, len(t.baseAttrs), len(t.baseAttrs)+6)
+	attrs := make([]attribute.KeyValue, len(t.baseAttrs), len(t.baseAttrs)+6) //nolint:mnd //see append below
 	copy(attrs, t.baseAttrs)
 	var statusCode int
 	if res != nil {

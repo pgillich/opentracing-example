@@ -14,6 +14,7 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-__debug_bin
+__debug_bin*
 build/bin/
 opentracing-example
+.vscode/launch.json

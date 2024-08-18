@@ -153,14 +153,23 @@ func ChiMetricMiddleware(meter metric_api.Meter, name string,
 	for aKey, aVal := range attributes {
 		baseAttrs = append(baseAttrs, attribute.Key(aKey).String(aVal))
 	}
-	attempted, err := middleware.Int64CounterGetInstrument(name, metric_api.WithDescription(description))
+	attempted, err := middleware.Int64CounterGetInstrument(
+		name,
+		metric_api.WithDescription(description),
+	)
 	if err != nil {
-		log.Error("unable to instantiate counter", logger.KeyError, err, "metricName", name)
+		log.Error("unable to instantiate counter",
+			logger.KeyError, err, "metricName", name)
 		panic(err)
 	}
-	durationSum, err := middleware.Float64CounterGetInstrument(name+"_duration", metric_api.WithDescription(description+", duration sum"), metric_api.WithUnit("s"))
+	durationSum, err := middleware.Float64CounterGetInstrument(
+		name+"_duration",
+		metric_api.WithDescription(description+", duration sum"),
+		metric_api.WithUnit("s"),
+	)
 	if err != nil {
-		log.Error("unable to instantiate time counter", logger.KeyError, err, "metricName", name)
+		log.Error("unable to instantiate time counter",
+			logger.KeyError, err, "metricName", name)
 		panic(err)
 	}
 

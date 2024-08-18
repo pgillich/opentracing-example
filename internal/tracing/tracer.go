@@ -44,6 +44,7 @@ func SetErrorHandlerLogger(log *slog.Logger) {
 
 const (
 	StateKeyClientCommand = "client_command"
+	StateKeyOidcCommand   = "oidc_command"
 	SpanKeyComponent      = "component"
 	SpanKeyComponentValue = "opentracing-example"
 )
