@@ -247,6 +247,11 @@ func (s *Oidc) setOidcRoutes(ctx context.Context, r *chi.Mux, httpClient *http.C
 		log.Error("unable to get provider:", logger.KeyError, err)
 		return err
 	}
+	oidcConfig := &oidc.Config{
+		ClientID: s.config.Oauth2ClientID,
+	}
+	oidcVerifier := oidcProvider.Verifier(oidcConfig)
+
 	oidcRedirectURL, err := url.JoinPath(s.serverURL(), s.config.OidcRedirectPath)
 	if err != nil {
 		log.Error("unable to get RedirectURL:", logger.KeyError, err)
@@ -264,12 +269,18 @@ func (s *Oidc) setOidcRoutes(ctx context.Context, r *chi.Mux, httpClient *http.C
 		state, err := randString(CookieStateLen)
 		if err != nil {
 			http.Error(w, "Internal error", http.StatusInternalServerError)
-
 			return
 		}
 		setCallbackCookie(w, r, "state", state)
 
-		http.Redirect(w, r, oauth2Config.AuthCodeURL(state), http.StatusFound)
+		nonce, err := randString(CookieStateLen)
+		if err != nil {
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+		setCallbackCookie(w, r, "nonce", nonce)
+
+		http.Redirect(w, r, oauth2Config.AuthCodeURL(state, oidc.Nonce(nonce)), http.StatusFound)
 	})
 
 	r.Get(s.config.OidcRedirectPath, func(w http.ResponseWriter, r *http.Request) {
@@ -295,16 +306,44 @@ func (s *Oidc) setOidcRoutes(ctx context.Context, r *chi.Mux, httpClient *http.C
 			return
 		}
 
+		rawIDToken, ok := oauth2Token.Extra("id_token").(string)
+		if !ok {
+			http.Error(w, "No id_token field in oauth2 token.", http.StatusInternalServerError)
+			return
+		}
+		idToken, err := oidcVerifier.Verify(ctx, rawIDToken)
+		if err != nil {
+			http.Error(w, "Failed to verify ID Token: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		nonce, err := r.Cookie("nonce")
+		if err != nil {
+			http.Error(w, "nonce not found", http.StatusBadRequest)
+			return
+		}
+		if idToken.Nonce != nonce.Value {
+			http.Error(w, "nonce did not match", http.StatusBadRequest)
+			return
+		}
+
 		resp := struct {
-			OAuth2Token *oauth2.Token
-			UserInfo    *oidc.UserInfo
-		}{oauth2Token, userInfo}
+			OAuth2Token   *oauth2.Token
+			UserInfo      *oidc.UserInfo
+			IDTokenClaims *json.RawMessage // ID Token payload is just JSON.
+		}{oauth2Token, userInfo, new(json.RawMessage)}
+
+		if err = idToken.Claims(&resp.IDTokenClaims); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		data, err := json.MarshalIndent(resp, "", "    ") //nolint:musttag // Not important
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		log.Info("oidc resp", "body", string(data))
+		log.Info("Oidc resp", "body", string(data))
 		if _, err := w.Write(data); err != nil {
 			log.Error("unable to send HTTP response", logger.KeyError, err)
 		}

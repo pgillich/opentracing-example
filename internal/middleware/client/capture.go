@@ -394,7 +394,7 @@ func (*CaptureTransport) saveCapture(r *http.Request, res *http.Response, capIte
 		if err = AppendFile(captureFilePath, yamlDoc, fakeFileNamePerm); err != nil {
 			log.Error("unable to write captured HTTP", logger.KeyError, err)
 		} else {
-			log.Info("capture doc written", "title", captureTitle)
+			log.Debug("CAP_DOC_WRITTEN", "title", captureTitle)
 		}
 	}
 }
@@ -424,7 +424,7 @@ func (t *CaptureTransport) fakeHttpResponse(r *http.Request, captureFilePath str
 				if capItem.Response.Body != nil {
 					body = *capItem.Response.Body
 				}
-				log.Debug("using fake response", "status", capItem.Response.StatusCode, "body", body)
+				log.Debug("CAP_FAKE_USE", "status", capItem.Response.StatusCode, "body", body)
 				return fakeResponse(r, capItem)
 			}
 		}
